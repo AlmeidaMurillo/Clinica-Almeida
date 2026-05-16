@@ -27,10 +27,17 @@ export default function Prontuarios() {
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
   const isRecepcao = profile?.role === "recepcao";
+  const consultaSelecionada = searchParams.get("consulta");
 
   const loadData = async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      setMessage("Supabase nao configurado. Confira as variaveis de ambiente.");
+      return;
+    }
+
+    setLoading(true);
     let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").neq("status", "nao_compareceu").order("created_at", { ascending: false });
     let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
     if (profile?.role === "medico" && profile.medico_id) {
@@ -38,10 +45,17 @@ export default function Prontuarios() {
       prontuariosQuery = prontuariosQuery.eq("medico_id", profile.medico_id);
     }
     const [consultasRes, prontuariosRes] = await Promise.all([consultasQuery.returns<Consulta[]>(), prontuariosQuery.returns<Prontuario[]>()]);
+
+    setLoading(false);
+    if (consultasRes.error || prontuariosRes.error) {
+      console.error("Erro ao carregar prontuarios", { consultasError: consultasRes.error, prontuariosError: prontuariosRes.error });
+      setMessage("Nao foi possivel carregar consultas/prontuarios. Confira as permissoes do Supabase.");
+      return;
+    }
+
     setConsultas(consultasRes.data ?? []);
     setProntuarios(prontuariosRes.data ?? []);
 
-    const consultaSelecionada = searchParams.get("consulta");
     if (consultaSelecionada && consultasRes.data?.some((consulta) => consulta.id === consultaSelecionada)) {
       const prontuarioExistente = prontuariosRes.data?.find((item) => item.consulta_id === consultaSelecionada);
 
@@ -52,10 +66,12 @@ export default function Prontuarios() {
       } else {
         setForm((currentForm) => ({ ...currentForm, consulta_id: consultaSelecionada }));
       }
+    } else if (consultaSelecionada) {
+      setMessage("Consulta nao encontrada para criar o prontuario. Verifique se ela esta confirmada e visivel para seu perfil.");
     }
   };
 
-  useEffect(() => { void loadData(); }, [profile]);
+  useEffect(() => { void loadData(); }, [profile, consultaSelecionada]);
 
   const resetForm = () => {
     setForm(initialForm);
@@ -65,9 +81,16 @@ export default function Prontuarios() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!supabase) {
+      setMessage("Supabase nao configurado. Confira as variaveis de ambiente.");
+      return;
+    }
+
     const consulta = consultas.find((item) => item.id === form.consulta_id);
-    if (!consulta) return;
+    if (!consulta) {
+      setMessage("Selecione uma consulta valida antes de salvar o prontuario.");
+      return;
+    }
 
     const payload = {
       consulta_id: consulta.id,
@@ -79,7 +102,8 @@ export default function Prontuarios() {
       observacoes: form.observacoes || null,
     };
 
-    const { data: prontuarioExistente } = editingId
+    setMessage("");
+    const { data: prontuarioExistente, error: consultaProntuarioError } = editingId
       ? { data: null }
       : await supabase
           .from("prontuarios")
@@ -87,17 +111,27 @@ export default function Prontuarios() {
           .eq("consulta_id", consulta.id)
           .maybeSingle();
 
+    if (consultaProntuarioError) {
+      console.error("Erro ao verificar prontuario existente", consultaProntuarioError);
+      setMessage(`Nao foi possivel verificar se a consulta ja tem prontuario: ${consultaProntuarioError.message}`);
+      return;
+    }
+
     const { error } = editingId
       ? await supabase.from("prontuarios").update(payload).eq("id", editingId)
       : prontuarioExistente
         ? await supabase.from("prontuarios").update(payload).eq("id", prontuarioExistente.id)
         : await supabase.from("prontuarios").insert(payload);
 
-    setMessage(error ? "Nao foi possivel salvar o prontuario." : editingId || prontuarioExistente ? "Prontuario atualizado com sucesso." : "Prontuario salvo com sucesso.");
-    if (!error) {
-      resetForm();
-      await loadData();
+    if (error) {
+      console.error("Erro ao salvar prontuario", error);
+      setMessage(`Nao foi possivel salvar o prontuario: ${error.message}`);
+      return;
     }
+
+    setMessage(editingId || prontuarioExistente ? "Prontuario atualizado com sucesso." : "Prontuario salvo com sucesso.");
+    resetForm();
+    await loadData();
   };
 
   const deleteProntuario = async (item: Prontuario) => {
@@ -116,6 +150,7 @@ export default function Prontuarios() {
             <h2>{editingId ? "Editar prontuario" : "Novo prontuario"}</h2>
             <form className={styles.form} onSubmit={handleSubmit}>
               <label className={styles.field}><span>Consulta</span><select value={form.consulta_id} onChange={(e) => setForm({ ...form, consulta_id: e.target.value })} required><option value="">Selecione</option>{consultas.map((consulta) => <option key={consulta.id} value={consulta.id}>{consulta.pacientes?.nome ?? "Paciente"} - {consulta.medicos?.nome ?? "Medico"}</option>)}</select></label>
+              {!loading && consultas.length === 0 && <p className={styles.message}>Nenhuma consulta disponivel para prontuario.</p>}
               <label className={styles.field}><span>Queixa</span><textarea value={form.queixa} onChange={(e) => setForm({ ...form, queixa: e.target.value })} /></label>
               <label className={styles.field}><span>Diagnostico</span><textarea value={form.diagnostico} onChange={(e) => setForm({ ...form, diagnostico: e.target.value })} /></label>
               <label className={styles.field}><span>Prescricao</span><textarea value={form.prescricao} onChange={(e) => setForm({ ...form, prescricao: e.target.value })} /></label>
@@ -123,7 +158,7 @@ export default function Prontuarios() {
               {message && <p className={styles.message}>{message}</p>}
               <div className={styles.actions}>
                 {editingId && <button className={styles.ghostButton} type="button" onClick={resetForm}>Cancelar</button>}
-                <button className={styles.button}>{editingId ? "Salvar" : "Salvar prontuario"}</button>
+                <button className={styles.button} disabled={loading}>{editingId ? "Salvar" : "Salvar prontuario"}</button>
               </div>
             </form>
           </article>

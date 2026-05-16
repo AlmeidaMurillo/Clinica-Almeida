@@ -64,6 +64,14 @@ type NotificationItem = {
 
 type NamedRelation = { nome?: string } | { nome?: string }[] | null | undefined;
 
+type NotificationRow = {
+  id: string;
+  data_hora: string;
+  status: "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
+  pacientes?: NamedRelation;
+  medicos?: NamedRelation;
+};
+
 type IconeProps = {
   nome: IconeNome;
 };
@@ -562,7 +570,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     const carregarNotificacoes = async () => {
-      if (!supabase || !profile) return;
+      if (!supabase) {
+        setNotificationCount(0);
+        setNotificationItems([]);
+        setNotificationText("Supabase nao configurado para carregar notificacoes.");
+        return;
+      }
+
+      if (!profile) return;
 
       const inicio = new Date();
       inicio.setHours(0, 0, 0, 0);
@@ -576,27 +591,45 @@ export default function AppLayout({ children }: AppLayoutProps) {
         .lt("data_hora", fim.toISOString())
         .order("data_hora", { ascending: true });
 
-      const { data, error } =
-        profile.role === "medico" && profile.medico_id
+      const { data, error } = profile.role === "medico"
+        ? profile.medico_id
           ? await query.eq("medico_id", profile.medico_id).in("status", ["confirmado", "pendente"])
-          : await query.eq("status", "pendente");
+          : { data: null, error: null }
+        : await query.in("status", ["pendente", "confirmado"]);
 
-      if (error) return;
+      if (error) {
+        console.error("Erro ao carregar notificacoes", error);
+        setNotificationCount(0);
+        setNotificationItems([]);
+        setNotificationText("Nao foi possivel carregar as notificacoes.");
+        return;
+      }
 
-      const items: NotificationItem[] = (data ?? []).slice(0, 6).map((item) => {
+      if (profile.role === "medico" && !profile.medico_id) {
+        setNotificationCount(0);
+        setNotificationItems([]);
+        setNotificationText("Seu perfil de medico nao esta vinculado a um cadastro de medico.");
+        return;
+      }
+
+      const rows = (data ?? []) as NotificationRow[];
+      const items: NotificationItem[] = rows.slice(0, 6).map((item) => {
         const hora = new Date(item.data_hora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         const paciente = getRelationName(item.pacientes, "Paciente");
         const medico = getRelationName(item.medicos, "Medico");
+        const pendente = item.status === "pendente";
 
         return {
           id: item.id,
-          title: profile.role === "medico" ? `${hora} - ${paciente}` : `${hora} - ${paciente}`,
-          description: profile.role === "medico" ? "Consulta na sua agenda de hoje." : `Pendente com ${medico}. Clique para confirmar.`,
+          title: `${hora} - ${paciente}`,
+          description: profile.role === "medico"
+            ? pendente ? "Agendamento pendente na sua agenda de hoje." : "Consulta confirmada na sua agenda de hoje."
+            : pendente ? `Pendente com ${medico}. Clique para confirmar.` : `Confirmado com ${medico}.`,
           to: profile.role === "medico" ? "/consultas" : "/agendamentos",
         };
       });
 
-      const total = data?.length ?? 0;
+      const total = rows.length;
       setNotificationCount(total);
       setNotificationItems(items);
       setNotificationText(
