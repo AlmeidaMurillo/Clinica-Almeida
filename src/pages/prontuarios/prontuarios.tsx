@@ -20,6 +20,13 @@ type AgendamentoProntuario = {
   medicos?: Consulta["medicos"];
 };
 
+type ConsultaRow = Omit<Consulta, "pacientes" | "medicos"> & {
+  pacientes?: Consulta["pacientes"];
+  medicos?: Consulta["medicos"];
+};
+
+type AgendamentoRow = AgendamentoProntuario;
+
 type ConsultaOption = {
   value: string;
   label: string;
@@ -36,6 +43,15 @@ function formatSupabaseError(error: SupabaseErrorLike) {
   return [error.message, error.code && `codigo: ${error.code}`, error.details, error.hint]
     .filter(Boolean)
     .join(" | ");
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function toForm(prontuario: Prontuario) {
@@ -69,11 +85,11 @@ export default function Prontuarios() {
     }
 
     setLoading(true);
-    let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").neq("status", "nao_compareceu").order("created_at", { ascending: false });
+    let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").order("created_at", { ascending: false });
     let agendamentosQuery = supabase
       .from("agendamentos")
       .select("id,paciente_id,medico_id,data_hora,status,pacientes(nome),medicos(nome,especialidade)")
-      .in("status", ["pendente", "confirmado", "concluido"])
+      .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
       .order("data_hora", { ascending: false });
     let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
     const medicoId = await resolveMedicoId(profile, user?.email);
@@ -92,30 +108,118 @@ export default function Prontuarios() {
       prontuariosQuery = prontuariosQuery.eq("medico_id", medicoId);
     }
     const [consultasRes, agendamentosRes, prontuariosRes] = await Promise.all([
-      consultasQuery.returns<Consulta[]>(),
-      agendamentosQuery.returns<AgendamentoProntuario[]>(),
+      consultasQuery.returns<ConsultaRow[]>(),
+      agendamentosQuery.returns<AgendamentoRow[]>(),
       prontuariosQuery.returns<Prontuario[]>(),
     ]);
 
-    setLoading(false);
-    if (consultasRes.error || agendamentosRes.error || prontuariosRes.error) {
-      console.error("Erro ao carregar prontuarios", {
-        consultasError: consultasRes.error,
-        agendamentosError: agendamentosRes.error,
-        prontuariosError: prontuariosRes.error,
-      });
-      setMessage("Nao foi possivel carregar consultas/agendamentos/prontuarios. Confira as permissoes do Supabase.");
-      return;
+    let consultasData = consultasRes.error ? [] : (consultasRes.data ?? []) as Consulta[];
+    let agendamentosData = agendamentosRes.error ? [] : agendamentosRes.data ?? [];
+    let prontuariosData = prontuariosRes.error ? [] : prontuariosRes.data ?? [];
+
+    if (consultasRes.error) {
+      console.error("Erro ao carregar consultas com relacionamentos", consultasRes.error);
+      let consultasFallbackQuery = supabase
+        .from("consultas")
+        .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
+        .order("created_at", { ascending: false });
+
+      if (profile?.role === "medico" && medicoId) {
+        consultasFallbackQuery = consultasFallbackQuery.eq("medico_id", medicoId);
+      }
+
+      const { data, error } = await consultasFallbackQuery.returns<Consulta[]>();
+      if (error) {
+        setLoading(false);
+        console.error("Erro ao carregar consultas simples", error);
+        setMessage(`Nao foi possivel carregar consultas: ${formatSupabaseError(error)}`);
+        return;
+      }
+
+      consultasData = data ?? [];
     }
 
-    const consultasData = consultasRes.data ?? [];
-    const agendamentosSemConsulta = (agendamentosRes.data ?? []).filter(
-      (agendamento) => !consultasData.some((consulta) => consulta.agendamento_id === agendamento.id)
-    );
+    if (agendamentosRes.error) {
+      console.error("Erro ao carregar agendamentos com relacionamentos", agendamentosRes.error);
+      let agendamentosFallbackQuery = supabase
+        .from("agendamentos")
+        .select("id,paciente_id,medico_id,data_hora,status")
+        .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
+        .order("data_hora", { ascending: false });
+
+      if (profile?.role === "medico" && medicoId) {
+        agendamentosFallbackQuery = agendamentosFallbackQuery.eq("medico_id", medicoId);
+      }
+
+      const { data, error } = await agendamentosFallbackQuery.returns<AgendamentoProntuario[]>();
+      if (error) {
+        setLoading(false);
+        console.error("Erro ao carregar agendamentos simples", error);
+        setMessage(`Nao foi possivel carregar agendamentos: ${formatSupabaseError(error)}`);
+        return;
+      }
+
+      agendamentosData = data ?? [];
+    }
+
+    if (prontuariosRes.error) {
+      console.error("Erro ao carregar prontuarios com relacionamentos", prontuariosRes.error);
+      let prontuariosFallbackQuery = supabase
+        .from("prontuarios")
+        .select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at")
+        .order("created_at", { ascending: false });
+
+      if (profile?.role === "medico" && medicoId) {
+        prontuariosFallbackQuery = prontuariosFallbackQuery.eq("medico_id", medicoId);
+      }
+
+      const { data, error } = await prontuariosFallbackQuery.returns<Prontuario[]>();
+      if (error) {
+        setLoading(false);
+        console.error("Erro ao carregar prontuarios simples", error);
+        setMessage(`Nao foi possivel carregar prontuarios: ${formatSupabaseError(error)}`);
+        return;
+      }
+
+      prontuariosData = data ?? [];
+    }
+
+    setLoading(false);
+
+    if (profile?.role === "medico" && medicoId && consultasData.length === 0) {
+      const { data, error } = await supabase
+        .from("consultas")
+        .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
+        .eq("medico_id", medicoId)
+        .order("created_at", { ascending: false })
+        .returns<Consulta[]>();
+
+      if (error) {
+        console.error("Erro ao carregar consultas simples", error);
+      } else {
+        consultasData = data ?? [];
+      }
+    }
+
+    if (profile?.role === "medico" && medicoId && agendamentosData.length === 0) {
+      const { data, error } = await supabase
+        .from("agendamentos")
+        .select("id,paciente_id,medico_id,data_hora,status")
+        .eq("medico_id", medicoId)
+        .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
+        .order("data_hora", { ascending: false })
+        .returns<AgendamentoProntuario[]>();
+
+      if (error) {
+        console.error("Erro ao carregar agendamentos simples", error);
+      } else {
+        agendamentosData = data ?? [];
+      }
+    }
 
     setConsultas(consultasData);
-    setAgendamentos(agendamentosSemConsulta);
-    setProntuarios(prontuariosRes.data ?? []);
+    setAgendamentos(agendamentosData);
+    setProntuarios(prontuariosData);
 
     if (consultaSelecionada && consultasRes.data?.some((consulta) => consulta.id === consultaSelecionada)) {
       const prontuarioExistente = prontuariosRes.data?.find((item) => item.consulta_id === consultaSelecionada);
@@ -143,11 +247,11 @@ export default function Prontuarios() {
   const consultaOptions: ConsultaOption[] = [
     ...consultas.map((consulta) => ({
       value: consulta.id,
-      label: `${consulta.pacientes?.nome ?? "Paciente"} - ${consulta.medicos?.nome ?? "Medico"} (${consulta.status.replace("_", " ")})`,
+      label: `${consulta.pacientes?.nome ?? `Paciente ${consulta.paciente_id.slice(0, 8)}`} - ${consulta.medicos?.nome ?? `Medico ${consulta.medico_id.slice(0, 8)}`} (${consulta.status.replace("_", " ")})`,
     })),
     ...agendamentos.map((agendamento) => ({
       value: `agendamento:${agendamento.id}`,
-      label: `${agendamento.pacientes?.nome ?? "Paciente"} - ${agendamento.medicos?.nome ?? "Medico"} (${agendamento.status})`,
+      label: `${agendamento.pacientes?.nome ?? `Paciente ${agendamento.paciente_id.slice(0, 8)}`} - ${agendamento.medicos?.nome ?? `Medico ${agendamento.medico_id.slice(0, 8)}`} (${agendamento.status}, ${formatDateTime(agendamento.data_hora)})`,
     })),
   ];
 
