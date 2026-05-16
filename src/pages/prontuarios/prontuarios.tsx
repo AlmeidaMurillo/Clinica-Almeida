@@ -9,6 +9,7 @@ import { supabase } from "../../lib/supabase";
 import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { consulta_id: "", queixa: "", diagnostico: "", prescricao: "", observacoes: "" };
+const allowedConsultaStatuses = ["em_atendimento", "finalizada"] as const;
 
 type AgendamentoProntuario = {
   id: string;
@@ -85,12 +86,11 @@ export default function Prontuarios() {
     }
 
     setLoading(true);
-    let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").order("created_at", { ascending: false });
-    let agendamentosQuery = supabase
-      .from("agendamentos")
-      .select("id,paciente_id,medico_id,data_hora,status,pacientes(nome),medicos(nome,especialidade)")
-      .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
-      .order("data_hora", { ascending: false });
+    let consultasQuery = supabase
+      .from("consultas")
+      .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
+      .in("status", allowedConsultaStatuses)
+      .order("created_at", { ascending: false });
     let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
     const medicoId = await resolveMedicoId(profile, user?.email);
     if (profile?.role === "medico") {
@@ -104,12 +104,11 @@ export default function Prontuarios() {
       }
 
       consultasQuery = consultasQuery.eq("medico_id", medicoId);
-      agendamentosQuery = agendamentosQuery.eq("medico_id", medicoId);
       prontuariosQuery = prontuariosQuery.eq("medico_id", medicoId);
     }
     const [consultasRes, agendamentosRes, prontuariosRes] = await Promise.all([
       consultasQuery.returns<ConsultaRow[]>(),
-      agendamentosQuery.returns<AgendamentoRow[]>(),
+      Promise.resolve({ data: [], error: null } as { data: AgendamentoRow[]; error: null }),
       prontuariosQuery.returns<Prontuario[]>(),
     ]);
 
@@ -122,6 +121,7 @@ export default function Prontuarios() {
       let consultasFallbackQuery = supabase
         .from("consultas")
         .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
+        .in("status", allowedConsultaStatuses)
         .order("created_at", { ascending: false });
 
       if (profile?.role === "medico" && medicoId) {
@@ -137,29 +137,6 @@ export default function Prontuarios() {
       }
 
       consultasData = data ?? [];
-    }
-
-    if (agendamentosRes.error) {
-      console.error("Erro ao carregar agendamentos com relacionamentos", agendamentosRes.error);
-      let agendamentosFallbackQuery = supabase
-        .from("agendamentos")
-        .select("id,paciente_id,medico_id,data_hora,status")
-        .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
-        .order("data_hora", { ascending: false });
-
-      if (profile?.role === "medico" && medicoId) {
-        agendamentosFallbackQuery = agendamentosFallbackQuery.eq("medico_id", medicoId);
-      }
-
-      const { data, error } = await agendamentosFallbackQuery.returns<AgendamentoProntuario[]>();
-      if (error) {
-        setLoading(false);
-        console.error("Erro ao carregar agendamentos simples", error);
-        setMessage(`Nao foi possivel carregar agendamentos: ${formatSupabaseError(error)}`);
-        return;
-      }
-
-      agendamentosData = data ?? [];
     }
 
     if (prontuariosRes.error) {
@@ -191,6 +168,7 @@ export default function Prontuarios() {
         .from("consultas")
         .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
         .eq("medico_id", medicoId)
+        .in("status", allowedConsultaStatuses)
         .order("created_at", { ascending: false })
         .returns<Consulta[]>();
 
@@ -198,22 +176,6 @@ export default function Prontuarios() {
         console.error("Erro ao carregar consultas simples", error);
       } else {
         consultasData = data ?? [];
-      }
-    }
-
-    if (profile?.role === "medico" && medicoId && agendamentosData.length === 0) {
-      const { data, error } = await supabase
-        .from("agendamentos")
-        .select("id,paciente_id,medico_id,data_hora,status")
-        .eq("medico_id", medicoId)
-        .in("status", ["pendente", "confirmado", "concluido", "cancelado"])
-        .order("data_hora", { ascending: false })
-        .returns<AgendamentoProntuario[]>();
-
-      if (error) {
-        console.error("Erro ao carregar agendamentos simples", error);
-      } else {
-        agendamentosData = data ?? [];
       }
     }
 
@@ -374,7 +336,7 @@ export default function Prontuarios() {
             <h2>{editingId ? "Editar prontuario" : "Novo prontuario"}</h2>
             <form className={styles.form} onSubmit={handleSubmit}>
               <label className={styles.field}><span>Consulta</span><select value={form.consulta_id} onChange={(e) => setForm({ ...form, consulta_id: e.target.value })} required><option value="">Selecione</option>{consultaOptions.map((consulta) => <option key={consulta.value} value={consulta.value}>{consulta.label}</option>)}</select></label>
-              {!loading && consultaOptions.length === 0 && <p className={styles.message}>Nenhuma consulta ou agendamento disponivel para prontuario.</p>}
+              {!loading && consultaOptions.length === 0 && <p className={styles.message}>Nenhuma consulta em andamento ou finalizada disponivel para prontuario.</p>}
               <label className={styles.field}><span>Queixa</span><textarea value={form.queixa} onChange={(e) => setForm({ ...form, queixa: e.target.value })} /></label>
               <label className={styles.field}><span>Diagnostico</span><textarea value={form.diagnostico} onChange={(e) => setForm({ ...form, diagnostico: e.target.value })} /></label>
               <label className={styles.field}><span>Prescricao</span><textarea value={form.prescricao} onChange={(e) => setForm({ ...form, prescricao: e.target.value })} /></label>
