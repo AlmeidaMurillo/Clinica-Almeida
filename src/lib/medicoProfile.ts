@@ -32,7 +32,10 @@ export async function resolveMedicoId(profile: Profile | null, email?: string | 
     ? data?.find((medico) => medico.email?.trim().toLowerCase() === normalizedEmail)
     : null;
 
-  if (byEmail) return byEmail.id;
+  if (byEmail) {
+    await linkProfileToMedico(profile.id, byEmail.id);
+    return byEmail.id;
+  }
 
   const byName = data?.find((medico) => {
     const normalizedMedicoName = normalizeName(medico.nome);
@@ -41,5 +44,24 @@ export async function resolveMedicoId(profile: Profile | null, email?: string | 
       || normalizedProfileName.includes(normalizedMedicoName);
   });
 
-  return byName?.id ?? null;
+  if (byName) {
+    await linkProfileToMedico(profile.id, byName.id);
+    return byName.id;
+  }
+
+  return null;
+}
+
+async function linkProfileToMedico(profileId: string, medicoId: string) {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ medico_id: medicoId })
+    .eq("id", profileId)
+    .is("medico_id", null);
+
+  if (error) {
+    console.warn("Nao foi possivel vincular o perfil ao medico automaticamente", error);
+  }
 }

@@ -25,6 +25,19 @@ type ConsultaOption = {
   label: string;
 };
 
+type SupabaseErrorLike = {
+  message: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+function formatSupabaseError(error: SupabaseErrorLike) {
+  return [error.message, error.code && `codigo: ${error.code}`, error.details, error.hint]
+    .filter(Boolean)
+    .join(" | ");
+}
+
 function toForm(prontuario: Prontuario) {
   return {
     consulta_id: prontuario.consulta_id,
@@ -45,6 +58,7 @@ export default function Prontuarios() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const isRecepcao = profile?.role === "recepcao";
   const consultaSelecionada = searchParams.get("consulta");
 
@@ -217,19 +231,21 @@ export default function Prontuarios() {
 
     if (consultaProntuarioError) {
       console.error("Erro ao verificar prontuario existente", consultaProntuarioError);
-      setMessage(`Nao foi possivel verificar se a consulta ja tem prontuario: ${consultaProntuarioError.message}`);
+      setMessage(`Nao foi possivel verificar se a consulta ja tem prontuario: ${formatSupabaseError(consultaProntuarioError)}`);
       return;
     }
 
+    setSaving(true);
     const { error } = editingId
       ? await supabase.from("prontuarios").update(payload).eq("id", editingId)
       : prontuarioExistente
         ? await supabase.from("prontuarios").update(payload).eq("id", prontuarioExistente.id)
         : await supabase.from("prontuarios").insert(payload);
+    setSaving(false);
 
     if (error) {
       console.error("Erro ao salvar prontuario", error);
-      setMessage(`Nao foi possivel salvar o prontuario: ${error.message}`);
+      setMessage(`Nao foi possivel salvar o prontuario: ${formatSupabaseError(error)}`);
       return;
     }
 
@@ -262,7 +278,7 @@ export default function Prontuarios() {
               {message && <p className={styles.message}>{message}</p>}
               <div className={styles.actions}>
                 {editingId && <button className={styles.ghostButton} type="button" onClick={resetForm}>Cancelar</button>}
-                <button className={styles.button} disabled={loading}>{editingId ? "Salvar" : "Salvar prontuario"}</button>
+                <button className={styles.button} disabled={loading || saving}>{saving ? "Salvando..." : editingId ? "Salvar" : "Salvar prontuario"}</button>
               </div>
             </form>
           </article>
