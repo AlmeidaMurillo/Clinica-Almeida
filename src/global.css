@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: light;
+
+  --brand-ink: #10202a;
+  --brand-forest: #12343b;
+  --brand-forest-strong: #0e2a30;
+  --brand-deep: #0b2027;
+  --brand-teal: #2c7a73;
+  --brand-teal-soft: #9ed8d2;
+  --brand-paper: #ffffff;
+  --brand-mist: #edf4f5;
+  --brand-line: #d7e3e7;
+  --brand-line-strong: #ccd8dd;
+  --brand-slate: #344b55;
+  --brand-muted: #637780;
+  --brand-placeholder: #91a2aa;
+  --brand-panel-muted: #b8ccd2;
+  --brand-panel-text: #d2e0e3;
+
+  --bg-primary: var(--brand-mist);
+  --surface: var(--brand-paper);
+
+  --text-color: var(--brand-slate);
+  --text-strong: var(--brand-ink);
+  --text-muted: var(--brand-muted);
+  --text-soft: var(--brand-placeholder);
+
+  --line: var(--brand-line);
+  --line-strong: var(--brand-line-strong);
+
+  --accent: var(--brand-teal);
+  --accent-contrast: var(--brand-paper);
+  --accent-glow: rgba(44, 122, 115, 0.14);
+
+  --control-bg: rgba(44, 122, 115, 0.08);
+  --control-hover: rgba(44, 122, 115, 0.14);
+
+  --button-bg: var(--brand-forest);
+  --button-text: var(--brand-paper);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  min-width: 240px;
+  max-width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-size: 16px;
+  background: var(--bg-primary);
+}
+
+body {
+  width: 100%;
+  min-width: 240px;
+  max-width: 100%;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-color);
+}
+
+#root {
+  width: 100%;
+  min-width: 240px;
+  max-width: 100%;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar global */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--brand-line);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--brand-teal);
+  border-radius: 0;
+}

@@ -1,0 +1,264 @@
+.pagina {
+  display: grid;
+  gap: 18px;
+  color: var(--text-strong);
+}
+
+.cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cabecalho h1 {
+  margin: 0;
+  color: var(--brand-ink);
+  font-size: 1.74rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.cabecalho p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(16, 32, 42, 0.14);
+}
+
+.formCard,
+.listCard {
+  padding: 18px;
+}
+
+.card h2 {
+  margin: 0 0 16px;
+  color: #071319;
+  font-size: 1.08rem;
+  font-weight: 900;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field span {
+  color: #20343b;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #071319;
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.field textarea {
+  min-height: 88px;
+  padding-top: 10px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: #006064;
+  box-shadow: 0 0 0 3px rgba(0, 96, 100, 0.12);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.button,
+.ghostButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button {
+  border: 0;
+  background: #006064;
+  color: #ffffff;
+}
+
+.ghostButton {
+  border: 1px solid var(--line-strong);
+  background: #ffffff;
+  color: #20343b;
+}
+
+.dangerButton {
+  border-color: rgba(157, 47, 47, 0.32);
+  color: #9d2f2f;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.button:disabled,
+.ghostButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.toolbar span {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  color: #071319;
+  font-size: 0.88rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: #20343b;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.table td {
+  font-weight: 680;
+}
+
+.muted {
+  color: var(--text-muted) !important;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: #d9eff0;
+  color: #006064;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.warning {
+  background: #fde9cf;
+  color: #9a5b0f;
+}
+
+.success {
+  background: #b8ebc8;
+  color: #1a5f37;
+}
+
+.danger {
+  background: #f3d0d0;
+  color: #9d2f2f;
+}
+
+.message {
+  border: 1px solid rgba(0, 96, 100, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 96, 100, 0.06);
+  color: #0b4254;
+  font-size: 0.86rem;
+  font-weight: 760;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  font-weight: 760;
+  text-align: center;
+}
+
+@media (max-width: 1050px) {
+  .grid,
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .cabecalho {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
