@@ -11,22 +11,10 @@ import styles from "../../components/CrudPage.module.css";
 const initialForm = { consulta_id: "", queixa: "", diagnostico: "", prescricao: "", observacoes: "" };
 const allowedConsultaStatuses = ["em_atendimento", "finalizada"] as const;
 
-type AgendamentoProntuario = {
-  id: string;
-  paciente_id: string;
-  medico_id: string;
-  data_hora: string;
-  status: "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
-  pacientes?: Consulta["pacientes"];
-  medicos?: Consulta["medicos"];
-};
-
 type ConsultaRow = Omit<Consulta, "pacientes" | "medicos"> & {
   pacientes?: Consulta["pacientes"];
   medicos?: Consulta["medicos"];
 };
-
-type AgendamentoRow = AgendamentoProntuario;
 
 type ConsultaOption = {
   value: string;
@@ -46,15 +34,6 @@ function formatSupabaseError(error: SupabaseErrorLike) {
     .join(" | ");
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function toForm(prontuario: Prontuario) {
   return {
     consulta_id: prontuario.consulta_id,
@@ -69,7 +48,6 @@ export default function Prontuarios() {
   const { profile, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [consultas, setConsultas] = useState<Consulta[]>([]);
-  const [agendamentos, setAgendamentos] = useState<AgendamentoProntuario[]>([]);
   const [prontuarios, setProntuarios] = useState<Prontuario[]>([]);
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -97,7 +75,6 @@ export default function Prontuarios() {
       if (!medicoId) {
         setLoading(false);
         setConsultas([]);
-        setAgendamentos([]);
         setProntuarios([]);
         setMessage("Seu usuario medico nao foi encontrado no cadastro de medicos.");
         return;
@@ -106,14 +83,12 @@ export default function Prontuarios() {
       consultasQuery = consultasQuery.eq("medico_id", medicoId);
       prontuariosQuery = prontuariosQuery.eq("medico_id", medicoId);
     }
-    const [consultasRes, agendamentosRes, prontuariosRes] = await Promise.all([
+    const [consultasRes, prontuariosRes] = await Promise.all([
       consultasQuery.returns<ConsultaRow[]>(),
-      Promise.resolve({ data: [], error: null } as { data: AgendamentoRow[]; error: null }),
       prontuariosQuery.returns<Prontuario[]>(),
     ]);
 
     let consultasData = consultasRes.error ? [] : (consultasRes.data ?? []) as Consulta[];
-    let agendamentosData = agendamentosRes.error ? [] : agendamentosRes.data ?? [];
     let prontuariosData = prontuariosRes.error ? [] : prontuariosRes.data ?? [];
 
     if (consultasRes.error) {
@@ -180,7 +155,6 @@ export default function Prontuarios() {
     }
 
     setConsultas(consultasData);
-    setAgendamentos(agendamentosData);
     setProntuarios(prontuariosData);
 
     if (consultaSelecionada && consultasRes.data?.some((consulta) => consulta.id === consultaSelecionada)) {
@@ -211,10 +185,6 @@ export default function Prontuarios() {
       value: consulta.id,
       label: `${consulta.pacientes?.nome ?? `Paciente ${consulta.paciente_id.slice(0, 8)}`} - ${consulta.medicos?.nome ?? `Medico ${consulta.medico_id.slice(0, 8)}`} (${consulta.status.replace("_", " ")})`,
     })),
-    ...agendamentos.map((agendamento) => ({
-      value: `agendamento:${agendamento.id}`,
-      label: `${agendamento.pacientes?.nome ?? `Paciente ${agendamento.paciente_id.slice(0, 8)}`} - ${agendamento.medicos?.nome ?? `Medico ${agendamento.medico_id.slice(0, 8)}`} (${agendamento.status}, ${formatDateTime(agendamento.data_hora)})`,
-    })),
   ];
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -224,55 +194,10 @@ export default function Prontuarios() {
       return;
     }
 
-    const isAgendamento = form.consulta_id.startsWith("agendamento:");
-    const agendamentoId = isAgendamento ? form.consulta_id.replace("agendamento:", "") : "";
-    let consulta = consultas.find((item) => item.id === form.consulta_id);
-
-    if (!consulta && isAgendamento) {
-      const agendamento = agendamentos.find((item) => item.id === agendamentoId);
-      if (!agendamento) {
-        setMessage("Selecione uma consulta ou agendamento valido antes de salvar o prontuario.");
-        return;
-      }
-
-      const { data: consultaExistente, error: consultaExistenteError } = await supabase
-        .from("consultas")
-        .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
-        .eq("agendamento_id", agendamento.id)
-        .maybeSingle<Consulta>();
-
-      if (consultaExistenteError) {
-        console.error("Erro ao verificar consulta do agendamento", consultaExistenteError);
-        setMessage(`Nao foi possivel verificar a consulta do agendamento: ${consultaExistenteError.message}`);
-        return;
-      }
-
-      if (consultaExistente) {
-        consulta = consultaExistente;
-      } else {
-        const { data: novaConsulta, error: novaConsultaError } = await supabase
-          .from("consultas")
-          .insert({
-            agendamento_id: agendamento.id,
-            paciente_id: agendamento.paciente_id,
-            medico_id: agendamento.medico_id,
-            status: agendamento.status === "concluido" ? "finalizada" : "aguardando",
-          })
-          .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
-          .single<Consulta>();
-
-        if (novaConsultaError) {
-          console.error("Erro ao criar consulta para prontuario", novaConsultaError);
-          setMessage(`Nao foi possivel criar a consulta para este prontuario: ${novaConsultaError.message}`);
-          return;
-        }
-
-        consulta = novaConsulta;
-      }
-    }
+    const consulta = consultas.find((item) => item.id === form.consulta_id);
 
     if (!consulta) {
-      setMessage("Selecione uma consulta ou agendamento valido antes de salvar o prontuario.");
+      setMessage("Selecione uma consulta em andamento ou finalizada antes de salvar o prontuario.");
       return;
     }
 
