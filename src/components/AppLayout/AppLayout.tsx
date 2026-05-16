@@ -3,6 +3,7 @@ import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/authStore";
 import type { UserRole } from "../../auth/authStore";
+import { resolveMedicoId } from "../../lib/medicoProfile";
 import { supabase } from "../../lib/supabase";
 import BrandLogo from "../BrandLogo/BrandLogo";
 import ChatBot from "../chatbot/ChatBot";
@@ -582,7 +583,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
       const inicio = new Date();
       inicio.setHours(0, 0, 0, 0);
       const fim = new Date(inicio);
-      fim.setDate(fim.getDate() + 1);
+      fim.setDate(fim.getDate() + 30);
+
+      const medicoId = await resolveMedicoId(profile, user?.email);
 
       const query = supabase
         .from("agendamentos")
@@ -592,8 +595,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         .order("data_hora", { ascending: true });
 
       const { data, error } = profile.role === "medico"
-        ? profile.medico_id
-          ? await query.eq("medico_id", profile.medico_id).in("status", ["confirmado", "pendente"])
+        ? medicoId
+          ? await query.eq("medico_id", medicoId).in("status", ["confirmado", "pendente"])
           : { data: null, error: null }
         : await query.in("status", ["pendente", "confirmado"]);
 
@@ -605,25 +608,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
         return;
       }
 
-      if (profile.role === "medico" && !profile.medico_id) {
+      if (profile.role === "medico" && !medicoId) {
         setNotificationCount(0);
         setNotificationItems([]);
-        setNotificationText("Seu perfil de medico nao esta vinculado a um cadastro de medico.");
+        setNotificationText("Seu usuario medico nao foi encontrado no cadastro de medicos.");
         return;
       }
 
       const rows = (data ?? []) as NotificationRow[];
       const items: NotificationItem[] = rows.slice(0, 6).map((item) => {
-        const hora = new Date(item.data_hora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const dataHora = new Date(item.data_hora).toLocaleString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         const paciente = getRelationName(item.pacientes, "Paciente");
         const medico = getRelationName(item.medicos, "Medico");
         const pendente = item.status === "pendente";
 
         return {
           id: item.id,
-          title: `${hora} - ${paciente}`,
+          title: `${dataHora} - ${paciente}`,
           description: profile.role === "medico"
-            ? pendente ? "Agendamento pendente na sua agenda de hoje." : "Consulta confirmada na sua agenda de hoje."
+            ? pendente ? "Agendamento pendente na sua agenda." : "Consulta confirmada na sua agenda."
             : pendente ? `Pendente com ${medico}. Clique para confirmar.` : `Confirmado com ${medico}.`,
           to: profile.role === "medico" ? "/consultas" : "/agendamentos",
         };
@@ -635,11 +643,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
       setNotificationText(
         profile.role === "medico"
           ? total > 0
-            ? `Voce tem ${total} consulta${total === 1 ? "" : "s"} hoje.`
-            : "Nenhuma consulta na sua agenda hoje."
+            ? `Voce tem ${total} agendamento${total === 1 ? "" : "s"} nos proximos 30 dias.`
+            : "Nenhum agendamento na sua agenda nos proximos 30 dias."
           : total > 0
-            ? `A recepcao tem ${total} agendamento${total === 1 ? "" : "s"} pendente${total === 1 ? "" : "s"} hoje.`
-            : "Nenhum agendamento pendente hoje."
+            ? `A recepcao tem ${total} agendamento${total === 1 ? "" : "s"} nos proximos 30 dias.`
+            : "Nenhum agendamento nos proximos 30 dias."
       );
     };
 
@@ -647,7 +655,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const intervalo = window.setInterval(() => void carregarNotificacoes(), 60000);
 
     return () => window.clearInterval(intervalo);
-  }, [profile]);
+  }, [profile, user?.email]);
 
   const alternarMenu = () => setMenuAberto((aberto) => !aberto);
   const mostrarTooltip = (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, texto: string) => {

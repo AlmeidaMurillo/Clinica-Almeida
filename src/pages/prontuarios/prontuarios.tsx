@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import { useAuth } from "../../auth/authStore";
 import type { Consulta, Prontuario } from "../../lib/clinicTypes";
+import { resolveMedicoId } from "../../lib/medicoProfile";
 import { supabase } from "../../lib/supabase";
 import styles from "../../components/CrudPage.module.css";
 
@@ -20,7 +21,7 @@ function toForm(prontuario: Prontuario) {
 }
 
 export default function Prontuarios() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [consultas, setConsultas] = useState<Consulta[]>([]);
   const [prontuarios, setProntuarios] = useState<Prontuario[]>([]);
@@ -40,9 +41,18 @@ export default function Prontuarios() {
     setLoading(true);
     let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").neq("status", "nao_compareceu").order("created_at", { ascending: false });
     let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
-    if (profile?.role === "medico" && profile.medico_id) {
-      consultasQuery = consultasQuery.eq("medico_id", profile.medico_id);
-      prontuariosQuery = prontuariosQuery.eq("medico_id", profile.medico_id);
+    const medicoId = await resolveMedicoId(profile, user?.email);
+    if (profile?.role === "medico") {
+      if (!medicoId) {
+        setLoading(false);
+        setConsultas([]);
+        setProntuarios([]);
+        setMessage("Seu usuario medico nao foi encontrado no cadastro de medicos.");
+        return;
+      }
+
+      consultasQuery = consultasQuery.eq("medico_id", medicoId);
+      prontuariosQuery = prontuariosQuery.eq("medico_id", medicoId);
     }
     const [consultasRes, prontuariosRes] = await Promise.all([consultasQuery.returns<Consulta[]>(), prontuariosQuery.returns<Prontuario[]>()]);
 
@@ -71,7 +81,7 @@ export default function Prontuarios() {
     }
   };
 
-  useEffect(() => { void loadData(); }, [profile, consultaSelecionada]);
+  useEffect(() => { void loadData(); }, [profile, user?.email, consultaSelecionada]);
 
   const resetForm = () => {
     setForm(initialForm);

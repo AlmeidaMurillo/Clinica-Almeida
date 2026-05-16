@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import { useAuth } from "../../auth/authStore";
 import type { Consulta, ConsultaStatus } from "../../lib/clinicTypes";
+import { resolveMedicoId } from "../../lib/medicoProfile";
 import { supabase } from "../../lib/supabase";
 import styles from "../../components/CrudPage.module.css";
 
@@ -25,7 +26,7 @@ function statusLabel(status: ConsultaStatus) {
 }
 
 export default function Consultas() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [consultas, setConsultas] = useState<Consulta[]>([]);
   const [message, setMessage] = useState("");
   const isRecepcao = profile?.role === "recepcao";
@@ -33,12 +34,28 @@ export default function Consultas() {
   const loadConsultas = async () => {
     if (!supabase) return;
     let query = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").order("created_at", { ascending: false });
-    if (profile?.role === "medico" && profile.medico_id) query = query.eq("medico_id", profile.medico_id);
-    const { data } = await query.returns<Consulta[]>();
+    const medicoId = await resolveMedicoId(profile, user?.email);
+    if (profile?.role === "medico") {
+      if (!medicoId) {
+        setConsultas([]);
+        setMessage("Seu usuario medico nao foi encontrado no cadastro de medicos.");
+        return;
+      }
+
+      query = query.eq("medico_id", medicoId);
+    }
+
+    const { data, error } = await query.returns<Consulta[]>();
+    if (error) {
+      console.error("Erro ao carregar consultas", error);
+      setMessage("Nao foi possivel carregar as consultas.");
+      return;
+    }
+
     setConsultas(data ?? []);
   };
 
-  useEffect(() => { void loadConsultas(); }, [profile]);
+  useEffect(() => { void loadConsultas(); }, [profile, user?.email]);
 
   const updateStatus = async (consulta: Consulta, status: Consulta["status"]) => {
     if (!supabase) return;
