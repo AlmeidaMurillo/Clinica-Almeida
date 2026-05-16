@@ -10,6 +10,21 @@ import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { consulta_id: "", queixa: "", diagnostico: "", prescricao: "", observacoes: "" };
 
+type AgendamentoProntuario = {
+  id: string;
+  paciente_id: string;
+  medico_id: string;
+  data_hora: string;
+  status: "pendente" | "confirmado" | "cancelado" | "concluido" | "nao_compareceu";
+  pacientes?: Consulta["pacientes"];
+  medicos?: Consulta["medicos"];
+};
+
+type ConsultaOption = {
+  value: string;
+  label: string;
+};
+
 function toForm(prontuario: Prontuario) {
   return {
     consulta_id: prontuario.consulta_id,
@@ -24,6 +39,7 @@ export default function Prontuarios() {
   const { profile, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [consultas, setConsultas] = useState<Consulta[]>([]);
+  const [agendamentos, setAgendamentos] = useState<AgendamentoProntuario[]>([]);
   const [prontuarios, setProntuarios] = useState<Prontuario[]>([]);
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,30 +56,51 @@ export default function Prontuarios() {
 
     setLoading(true);
     let consultasQuery = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").neq("status", "nao_compareceu").order("created_at", { ascending: false });
+    let agendamentosQuery = supabase
+      .from("agendamentos")
+      .select("id,paciente_id,medico_id,data_hora,status,pacientes(nome),medicos(nome,especialidade)")
+      .in("status", ["pendente", "confirmado", "concluido"])
+      .order("data_hora", { ascending: false });
     let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
     const medicoId = await resolveMedicoId(profile, user?.email);
     if (profile?.role === "medico") {
       if (!medicoId) {
         setLoading(false);
         setConsultas([]);
+        setAgendamentos([]);
         setProntuarios([]);
         setMessage("Seu usuario medico nao foi encontrado no cadastro de medicos.");
         return;
       }
 
       consultasQuery = consultasQuery.eq("medico_id", medicoId);
+      agendamentosQuery = agendamentosQuery.eq("medico_id", medicoId);
       prontuariosQuery = prontuariosQuery.eq("medico_id", medicoId);
     }
-    const [consultasRes, prontuariosRes] = await Promise.all([consultasQuery.returns<Consulta[]>(), prontuariosQuery.returns<Prontuario[]>()]);
+    const [consultasRes, agendamentosRes, prontuariosRes] = await Promise.all([
+      consultasQuery.returns<Consulta[]>(),
+      agendamentosQuery.returns<AgendamentoProntuario[]>(),
+      prontuariosQuery.returns<Prontuario[]>(),
+    ]);
 
     setLoading(false);
-    if (consultasRes.error || prontuariosRes.error) {
-      console.error("Erro ao carregar prontuarios", { consultasError: consultasRes.error, prontuariosError: prontuariosRes.error });
-      setMessage("Nao foi possivel carregar consultas/prontuarios. Confira as permissoes do Supabase.");
+    if (consultasRes.error || agendamentosRes.error || prontuariosRes.error) {
+      console.error("Erro ao carregar prontuarios", {
+        consultasError: consultasRes.error,
+        agendamentosError: agendamentosRes.error,
+        prontuariosError: prontuariosRes.error,
+      });
+      setMessage("Nao foi possivel carregar consultas/agendamentos/prontuarios. Confira as permissoes do Supabase.");
       return;
     }
 
-    setConsultas(consultasRes.data ?? []);
+    const consultasData = consultasRes.data ?? [];
+    const agendamentosSemConsulta = (agendamentosRes.data ?? []).filter(
+      (agendamento) => !consultasData.some((consulta) => consulta.agendamento_id === agendamento.id)
+    );
+
+    setConsultas(consultasData);
+    setAgendamentos(agendamentosSemConsulta);
     setProntuarios(prontuariosRes.data ?? []);
 
     if (consultaSelecionada && consultasRes.data?.some((consulta) => consulta.id === consultaSelecionada)) {
@@ -89,6 +126,17 @@ export default function Prontuarios() {
     setSearchParams({});
   };
 
+  const consultaOptions: ConsultaOption[] = [
+    ...consultas.map((consulta) => ({
+      value: consulta.id,
+      label: `${consulta.pacientes?.nome ?? "Paciente"} - ${consulta.medicos?.nome ?? "Medico"} (${consulta.status.replace("_", " ")})`,
+    })),
+    ...agendamentos.map((agendamento) => ({
+      value: `agendamento:${agendamento.id}`,
+      label: `${agendamento.pacientes?.nome ?? "Paciente"} - ${agendamento.medicos?.nome ?? "Medico"} (${agendamento.status})`,
+    })),
+  ];
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) {
@@ -96,9 +144,55 @@ export default function Prontuarios() {
       return;
     }
 
-    const consulta = consultas.find((item) => item.id === form.consulta_id);
+    const isAgendamento = form.consulta_id.startsWith("agendamento:");
+    const agendamentoId = isAgendamento ? form.consulta_id.replace("agendamento:", "") : "";
+    let consulta = consultas.find((item) => item.id === form.consulta_id);
+
+    if (!consulta && isAgendamento) {
+      const agendamento = agendamentos.find((item) => item.id === agendamentoId);
+      if (!agendamento) {
+        setMessage("Selecione uma consulta ou agendamento valido antes de salvar o prontuario.");
+        return;
+      }
+
+      const { data: consultaExistente, error: consultaExistenteError } = await supabase
+        .from("consultas")
+        .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
+        .eq("agendamento_id", agendamento.id)
+        .maybeSingle<Consulta>();
+
+      if (consultaExistenteError) {
+        console.error("Erro ao verificar consulta do agendamento", consultaExistenteError);
+        setMessage(`Nao foi possivel verificar a consulta do agendamento: ${consultaExistenteError.message}`);
+        return;
+      }
+
+      if (consultaExistente) {
+        consulta = consultaExistente;
+      } else {
+        const { data: novaConsulta, error: novaConsultaError } = await supabase
+          .from("consultas")
+          .insert({
+            agendamento_id: agendamento.id,
+            paciente_id: agendamento.paciente_id,
+            medico_id: agendamento.medico_id,
+            status: agendamento.status === "concluido" ? "finalizada" : "aguardando",
+          })
+          .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
+          .single<Consulta>();
+
+        if (novaConsultaError) {
+          console.error("Erro ao criar consulta para prontuario", novaConsultaError);
+          setMessage(`Nao foi possivel criar a consulta para este prontuario: ${novaConsultaError.message}`);
+          return;
+        }
+
+        consulta = novaConsulta;
+      }
+    }
+
     if (!consulta) {
-      setMessage("Selecione uma consulta valida antes de salvar o prontuario.");
+      setMessage("Selecione uma consulta ou agendamento valido antes de salvar o prontuario.");
       return;
     }
 
@@ -159,8 +253,8 @@ export default function Prontuarios() {
           <article className={`${styles.card} ${styles.formCard}`}>
             <h2>{editingId ? "Editar prontuario" : "Novo prontuario"}</h2>
             <form className={styles.form} onSubmit={handleSubmit}>
-              <label className={styles.field}><span>Consulta</span><select value={form.consulta_id} onChange={(e) => setForm({ ...form, consulta_id: e.target.value })} required><option value="">Selecione</option>{consultas.map((consulta) => <option key={consulta.id} value={consulta.id}>{consulta.pacientes?.nome ?? "Paciente"} - {consulta.medicos?.nome ?? "Medico"}</option>)}</select></label>
-              {!loading && consultas.length === 0 && <p className={styles.message}>Nenhuma consulta disponivel para prontuario.</p>}
+              <label className={styles.field}><span>Consulta</span><select value={form.consulta_id} onChange={(e) => setForm({ ...form, consulta_id: e.target.value })} required><option value="">Selecione</option>{consultaOptions.map((consulta) => <option key={consulta.value} value={consulta.value}>{consulta.label}</option>)}</select></label>
+              {!loading && consultaOptions.length === 0 && <p className={styles.message}>Nenhuma consulta ou agendamento disponivel para prontuario.</p>}
               <label className={styles.field}><span>Queixa</span><textarea value={form.queixa} onChange={(e) => setForm({ ...form, queixa: e.target.value })} /></label>
               <label className={styles.field}><span>Diagnostico</span><textarea value={form.diagnostico} onChange={(e) => setForm({ ...form, diagnostico: e.target.value })} /></label>
               <label className={styles.field}><span>Prescricao</span><textarea value={form.prescricao} onChange={(e) => setForm({ ...form, prescricao: e.target.value })} /></label>

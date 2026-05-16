@@ -113,6 +113,7 @@ type AcoesCabecalhoProps = {
   notificationItems: NotificationItem[];
   notificationText: string;
   notificationCount: number;
+  onReadNotification: (id: string) => void;
   onSignOut: () => void;
 };
 
@@ -367,7 +368,7 @@ function SecaoMenu({ titulo, links, aberto, menuAberto, alternarSecao, fecharMen
   );
 }
 
-function AcoesCabecalho({ nomeUsuario, emailUsuario, cargoUsuario, notificationItems, notificationText, notificationCount, onSignOut }: AcoesCabecalhoProps) {
+function AcoesCabecalho({ nomeUsuario, emailUsuario, cargoUsuario, notificationItems, notificationText, notificationCount, onReadNotification, onSignOut }: AcoesCabecalhoProps) {
   const [perfilAberto, setPerfilAberto] = useState(false);
   const [notificacoesAbertas, setNotificacoesAbertas] = useState(false);
   const acoesRef = useRef<HTMLDivElement | null>(null);
@@ -412,12 +413,20 @@ function AcoesCabecalho({ nomeUsuario, emailUsuario, cargoUsuario, notificationI
           <div className={styles.popoverConta} role="dialog" aria-label="Notificacoes">
             <div className={styles.popoverTitulo}>
               <strong>Notificacoes</strong>
-              <small>{notificationCount > 0 ? `${notificationCount} hoje` : "Tudo certo"}</small>
+              <small>{notificationCount > 0 ? `${notificationCount} nova${notificationCount === 1 ? "" : "s"}` : "Tudo certo"}</small>
             </div>
             {notificationItems.length > 0 ? (
               <nav className={styles.listaNotificacoes}>
                 {notificationItems.map((item) => (
-                  <NavLink key={item.id} className={styles.notificacaoItem} to={item.to} onClick={() => setNotificacoesAbertas(false)}>
+                  <NavLink
+                    key={item.id}
+                    className={styles.notificacaoItem}
+                    to={item.to}
+                    onClick={() => {
+                      onReadNotification(item.id);
+                      setNotificacoesAbertas(false);
+                    }}
+                  >
                     <Icone nome="bell" />
                     <span>
                       <strong>{item.title}</strong>
@@ -528,6 +537,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [notificationItems, setNotificationItems] = useState<NotificationItem[]>([]);
   const [notificationText, setNotificationText] = useState("Nenhuma notificacao nova por enquanto.");
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [tooltipMenu, setTooltipMenu] = useState<TooltipMenu | null>(null);
   const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>(() =>
     menuPrincipal.reduce<Record<string, boolean>>((secoes, secao) => {
@@ -568,6 +578,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
       window.localStorage.setItem(MENU_ABERTO_KEY, menuAberto ? "aberto" : "fechado");
     }
   }, [menuAberto, mobile]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const stored = window.localStorage.getItem(`clinica-notificacoes-lidas-${profile.id}`);
+    setReadNotificationIds(stored ? JSON.parse(stored) as string[] : []);
+  }, [profile?.id]);
+
+  const markNotificationAsRead = (id: string) => {
+    if (!profile?.id) return;
+
+    setReadNotificationIds((currentIds) => {
+      if (currentIds.includes(id)) return currentIds;
+
+      const nextIds = [...currentIds, id];
+      window.localStorage.setItem(`clinica-notificacoes-lidas-${profile.id}`, JSON.stringify(nextIds));
+      return nextIds;
+    });
+  };
 
   useEffect(() => {
     const carregarNotificacoes = async () => {
@@ -616,7 +645,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
       }
 
       const rows = (data ?? []) as NotificationRow[];
-      const items: NotificationItem[] = rows.slice(0, 6).map((item) => {
+      const unreadRows = rows.filter((item) => !readNotificationIds.includes(item.id));
+      const items: NotificationItem[] = unreadRows.slice(0, 6).map((item) => {
         const dataHora = new Date(item.data_hora).toLocaleString("pt-BR", {
           day: "2-digit",
           month: "2-digit",
@@ -637,7 +667,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         };
       });
 
-      const total = rows.length;
+      const total = unreadRows.length;
       setNotificationCount(total);
       setNotificationItems(items);
       setNotificationText(
@@ -655,7 +685,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const intervalo = window.setInterval(() => void carregarNotificacoes(), 60000);
 
     return () => window.clearInterval(intervalo);
-  }, [profile, user?.email]);
+  }, [profile, user?.email, readNotificationIds]);
 
   const alternarMenu = () => setMenuAberto((aberto) => !aberto);
   const mostrarTooltip = (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, texto: string) => {
@@ -707,6 +737,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           notificationCount={notificationCount}
           notificationItems={notificationItems}
           notificationText={notificationText}
+          onReadNotification={markNotificationAsRead}
           onSignOut={handleSignOut}
         />
       </header>

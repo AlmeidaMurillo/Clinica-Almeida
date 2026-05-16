@@ -28,6 +28,8 @@ type ChatButtonProps = {
 
 type ChatHeaderProps = {
   onClose: () => void;
+  onNewChat: () => void;
+  onDeleteChat: () => void;
 };
 
 type ChatWindowProps = {
@@ -35,6 +37,8 @@ type ChatWindowProps = {
   loading: boolean;
   messages: ChatMessageData[];
   onClose: () => void;
+  onNewChat: () => void;
+  onDeleteChat: () => void;
   onSendMessage: (message: string) => Promise<void>;
 };
 
@@ -136,7 +140,28 @@ function ChatButton({ open, unread, onClick }: ChatButtonProps) {
   );
 }
 
-function ChatHeader({ onClose }: ChatHeaderProps) {
+function PlusIcon() {
+  return (
+    <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h16" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M6 7l1 14h10l1-14" />
+      <path d="M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+function ChatHeader({ onClose, onNewChat, onDeleteChat }: ChatHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.identity}>
@@ -150,9 +175,17 @@ function ChatHeader({ onClose }: ChatHeaderProps) {
         </div>
       </div>
 
-      <button className={styles.closeButton} type="button" onClick={onClose} aria-label="Fechar assistente virtual">
-        <CloseIcon />
-      </button>
+      <div className={styles.headerActions}>
+        <button className={styles.closeButton} type="button" onClick={onNewChat} aria-label="Novo chat">
+          <PlusIcon />
+        </button>
+        <button className={styles.closeButton} type="button" onClick={onDeleteChat} aria-label="Apagar chat">
+          <TrashIcon />
+        </button>
+        <button className={styles.closeButton} type="button" onClick={onClose} aria-label="Fechar assistente virtual">
+          <CloseIcon />
+        </button>
+      </div>
     </header>
   );
 }
@@ -247,7 +280,7 @@ function ChatInput({ disabled, onSendMessage }: ChatInputProps) {
   );
 }
 
-function ChatWindow({ open, loading, messages, onClose, onSendMessage }: ChatWindowProps) {
+function ChatWindow({ open, loading, messages, onClose, onNewChat, onDeleteChat, onSendMessage }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -256,7 +289,7 @@ function ChatWindow({ open, loading, messages, onClose, onSendMessage }: ChatWin
 
   return (
     <div className={`${styles.window} ${open ? styles.open : ""}`} aria-hidden={!open}>
-      <ChatHeader onClose={onClose} />
+      <ChatHeader onClose={onClose} onNewChat={onNewChat} onDeleteChat={onDeleteChat} />
 
       <div className={styles.body} role="log" aria-live="polite" aria-relevant="additions text">
         <div className={styles.intro}>
@@ -280,15 +313,27 @@ function ChatWindow({ open, loading, messages, onClose, onSendMessage }: ChatWin
 export default function ChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessageData[]>(() => [createMessage("assistant", INITIAL_MESSAGE)]);
+  const [readMessageCount, setReadMessageCount] = useState(1);
   const [loading, setLoading] = useState(false);
   const theme = useChatTheme();
   const abortRef = useRef<AbortController | null>(null);
 
-  const unread = useMemo(() => (!open && messages.length > 1 ? 1 : 0), [messages.length, open]);
+  const unread = useMemo(() => (!open ? Math.max(0, messages.length - readMessageCount) : 0), [messages.length, open, readMessageCount]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
+
+  useEffect(() => {
+    if (open) setReadMessageCount(messages.length);
+  }, [messages.length, open]);
+
+  const resetChat = () => {
+    abortRef.current?.abort();
+    setLoading(false);
+    setMessages([createMessage("assistant", INITIAL_MESSAGE)]);
+    setReadMessageCount(1);
+  };
 
   const sendMessage = async (content: string) => {
     const text = content.trim();
@@ -336,9 +381,21 @@ export default function ChatBot() {
         loading={loading}
         messages={messages}
         onClose={() => setOpen(false)}
+        onNewChat={resetChat}
+        onDeleteChat={resetChat}
         onSendMessage={sendMessage}
       />
-      <ChatButton open={open} unread={unread} onClick={() => setOpen((currentOpen) => !currentOpen)} />
+      <ChatButton
+        open={open}
+        unread={unread}
+        onClick={() => {
+          setOpen((currentOpen) => {
+            const nextOpen = !currentOpen;
+            if (nextOpen) setReadMessageCount(messages.length);
+            return nextOpen;
+          });
+        }}
+      />
     </section>
   );
 }
