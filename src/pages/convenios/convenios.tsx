@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import type { Convenio } from "../../lib/clinicTypes";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { nome: "", contato: "", telefone: "" };
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
 
 function toForm(convenio: Convenio) {
   return {
@@ -24,10 +32,32 @@ export default function Convenios() {
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+
+  const conveniosFiltrados = useMemo(() => {
+    const term = normalizeSearch(search);
+    if (!term) return convenios;
+
+    return convenios.filter((convenio) => {
+      const searchable = normalizeSearch([
+        convenio.nome,
+        convenio.contato ?? "",
+        convenio.telefone ?? "",
+      ].join(" "));
+
+      return searchable.includes(term);
+    });
+  }, [convenios, search]);
 
   const loadConvenios = async () => {
-    if (!supabase) return;
-    const { data } = await supabase.from("convenios").select("id,nome,contato,telefone,ativo").order("nome").returns<Convenio[]>();
+    if (!localDb) return;
+    const { data, error } = await localDb.from("convenios").select("id,nome,contato,telefone,ativo").order("created_at", { ascending: false }).returns<Convenio[]>();
+    if (error) {
+      console.error("Erro ao carregar convenios", error);
+      setMessage(`Nao foi possivel carregar os convenios. ${error.message}`);
+      return;
+    }
+
     setConvenios(data ?? []);
   };
 
@@ -40,31 +70,49 @@ export default function Convenios() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!localDb) return;
 
     const payload = { nome: form.nome, contato: form.contato || null, telefone: form.telefone || null, ativo: true };
     const { error } = editingId
-      ? await supabase.from("convenios").update(payload).eq("id", editingId)
-      : await supabase.from("convenios").insert(payload);
+      ? await localDb.from("convenios").update(payload).eq("id", editingId)
+      : await localDb.from("convenios").insert(payload);
 
-    setMessage(error ? "Nao foi possivel salvar o convenio." : editingId ? "Convenio atualizado com sucesso." : "Convenio cadastrado com sucesso.");
-    if (!error) {
-      resetForm();
-      await loadConvenios();
+    if (error) {
+      console.error("Erro ao salvar convenio", error);
+      setMessage(`Nao foi possivel salvar o convenio. ${error.message}`);
+      return;
     }
-  };
 
-  const deleteConvenio = async (convenio: Convenio) => {
-    if (!supabase || !window.confirm(`Apagar ${convenio.nome}?`)) return;
-    const { error } = await supabase.from("convenios").update({ ativo: false }).eq("id", convenio.id);
-    setMessage(error ? "Nao foi possivel apagar o convenio." : "Convenio apagado da lista ativa.");
+    setMessage(editingId ? "Convenio atualizado com sucesso." : "Convenio cadastrado com sucesso.");
+    resetForm();
     await loadConvenios();
   };
 
-  const restoreConvenio = async (convenio: Convenio) => {
-    if (!supabase) return;
-    const { error } = await supabase.from("convenios").update({ ativo: true }).eq("id", convenio.id);
-    setMessage(error ? "Nao foi possivel reativar o convenio." : "Convenio reativado.");
+  const toggleConvenioStatus = async (convenio: Convenio) => {
+    if (!localDb) return;
+
+    const { error } = await localDb.from("convenios").update({ ativo: !convenio.ativo }).eq("id", convenio.id);
+    if (error) {
+      console.error("Erro ao alterar status do convenio", error);
+      setMessage(`Nao foi possivel ${convenio.ativo ? "desativar" : "ativar"} o convenio. ${error.message}`);
+      return;
+    }
+
+    setMessage(convenio.ativo ? "Convenio desativado." : "Convenio ativado.");
+    await loadConvenios();
+  };
+
+  const deleteConvenio = async (convenio: Convenio) => {
+    if (!localDb || !window.confirm(`Apagar definitivamente ${convenio.nome}? Esta acao nao pode ser desfeita.`)) return;
+
+    const { error } = await localDb.from("convenios").delete().eq("id", convenio.id);
+    if (error) {
+      console.error("Erro ao apagar convenio", error);
+      setMessage(`Nao foi possivel apagar o convenio. ${error.message}`);
+      return;
+    }
+
+    setMessage("Convenio apagado definitivamente.");
     await loadConvenios();
   };
 
@@ -98,10 +146,14 @@ export default function Convenios() {
             </form>
           </article>
           <article className={`${styles.card} ${styles.listCard}`}>
-            <div className={styles.toolbar}><h2>Convenios cadastrados</h2><span>{convenios.length} registros</span></div>
+            <div className={styles.toolbar}><h2>Convenios cadastrados</h2><span>{conveniosFiltrados.length} de {convenios.length} registros</span></div>
+            <label className={`${styles.field} ${styles.searchField}`}>
+              <span>Pesquisar convenio</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, contato ou telefone" />
+            </label>
             <div className={styles.tableWrap}>
               <table className={styles.table}><thead><tr><th>Nome</th><th>Contato</th><th>Telefone</th><th>Status</th><th>Acoes</th></tr></thead>
-                <tbody>{convenios.map((item) => {
+                <tbody>{conveniosFiltrados.map((item) => {
                   const telefone = getPhoneDigits(item.telefone);
                   const whatsapp = telefone ? `https://wa.me/55${telefone}` : "";
                   const ligar = telefone ? `tel:${telefone}` : "";
@@ -118,14 +170,14 @@ export default function Convenios() {
                           {whatsapp && <a className={styles.ghostButton} href={whatsapp} target="_blank" rel="noreferrer">WhatsApp</a>}
                           <button className={styles.ghostButton} type="button" onClick={() => void copyContato(item)}>Copiar</button>
                           <button className={styles.ghostButton} type="button" onClick={() => { setForm(toForm(item)); setEditingId(item.id); setMessage(""); }}>Editar</button>
-                          {!item.ativo && <button className={styles.ghostButton} type="button" onClick={() => void restoreConvenio(item)}>Reativar</button>}
+                          <button className={styles.ghostButton} type="button" onClick={() => void toggleConvenioStatus(item)}>{item.ativo ? "Desativar" : "Ativar"}</button>
                           <button className={`${styles.ghostButton} ${styles.dangerButton}`} type="button" onClick={() => void deleteConvenio(item)}>Apagar</button>
                         </div>
                       </td>
                     </tr>
                   );
                 })}</tbody></table>
-              {convenios.length === 0 && <div className={styles.empty}>Nenhum convenio cadastrado.</div>}
+              {conveniosFiltrados.length === 0 && <div className={styles.empty}>{search ? "Nenhum convenio encontrado." : "Nenhum convenio cadastrado."}</div>}
             </div>
           </article>
         </section>

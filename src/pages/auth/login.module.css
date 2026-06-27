@@ -25,6 +25,7 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    min-height: 0;
     padding: 42px;
     background: var(--brand-forest);
     color: var(--brand-paper);
@@ -59,7 +60,7 @@
 
 .panelContent {
     max-width: 430px;
-    margin-top: 72px;
+    margin-top: 42px;
 }
 
 .kicker {
@@ -85,7 +86,7 @@
 }
 
 .panelFooter {
-    margin-top: auto;
+    margin-top: 26px;
     color: var(--brand-panel-muted);
     font-size: 14px;
     font-weight: 600;
@@ -168,6 +169,43 @@
     box-shadow: 0 0 0 4px var(--accent-glow);
 }
 
+.passwordWrap {
+    position: relative;
+}
+
+.passwordWrap input {
+    padding-right: 48px;
+}
+
+.eyeButton {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.eyeButton:hover {
+    background: rgba(0, 96, 100, 0.08);
+}
+
+.eyeButton svg {
+    width: 19px;
+    height: 19px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+}
+
 .remember {
     display: flex;
     align-items: center;
@@ -227,6 +265,99 @@
     text-align: center;
 }
 
+.demoAccess {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 24px;
+    min-height: 0;
+}
+
+.demoAccess strong {
+    display: block;
+    color: var(--brand-paper);
+    font-size: 0.9rem;
+    font-weight: 900;
+}
+
+.demoAccess span {
+    display: block;
+    margin-top: 3px;
+    color: var(--brand-panel-muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+.demoList {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-height: none;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.demoList button {
+    display: grid;
+    grid-template-columns: minmax(72px, 0.34fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+    border: 1px solid rgba(210, 224, 227, 0.22);
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--brand-paper);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.demoList button:hover {
+    border-color: var(--brand-teal-soft);
+    background: rgba(255, 255, 255, 0.13);
+}
+
+.demoList button span {
+    margin: 0;
+    color: var(--brand-teal-soft);
+    font-size: 0.72rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.demoList code {
+    overflow: hidden;
+    color: var(--brand-paper);
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.demoList small {
+    grid-column: 2;
+    color: var(--brand-panel-muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+.demoList::-webkit-scrollbar {
+    width: 6px;
+}
+
+.demoList::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.demoList::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(210, 224, 227, 0.35);
+}
+
 @media (max-width: 900px) {
     .containerLogin {
         height: auto;
@@ -268,6 +399,7 @@
     .loginArea {
         padding: 32px 24px;
     }
+
 }
 
 @media (max-width: 520px) {

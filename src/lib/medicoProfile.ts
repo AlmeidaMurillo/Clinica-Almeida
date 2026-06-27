@@ -1,5 +1,5 @@
 import type { Profile } from "../auth/authStore";
-import { supabase } from "./supabase";
+import { localDb } from "./localDatabase";
 
 function normalizeName(value: string) {
   return value
@@ -12,15 +12,16 @@ function normalizeName(value: string) {
 }
 
 export async function resolveMedicoId(profile: Profile | null, email?: string | null) {
-  if (!supabase || profile?.role !== "medico") return profile?.medico_id ?? null;
+  if (!localDb || profile?.role !== "medico") return profile?.medico_id ?? null;
   if (profile.medico_id) return profile.medico_id;
 
   const normalizedProfileName = normalizeName(profile.nome);
 
-  const { data, error } = await supabase
+  const { data, error } = await localDb
     .from("medicos")
     .select("id,nome,email,ativo")
-    .eq("ativo", true);
+    .eq("ativo", true)
+    .returns<Array<{ id: string; nome: string; email: string | null; ativo: boolean }>>();
 
   if (error) {
     console.error("Erro ao resolver cadastro do medico", error);
@@ -53,9 +54,9 @@ export async function resolveMedicoId(profile: Profile | null, email?: string | 
 }
 
 async function linkProfileToMedico(profileId: string, medicoId: string) {
-  if (!supabase) return;
+  if (!localDb) return;
 
-  const { error } = await supabase
+  const { error } = await localDb
     .from("profiles")
     .update({ medico_id: medicoId })
     .eq("id", profileId)

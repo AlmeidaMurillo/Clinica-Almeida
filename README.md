@@ -1,27 +1,29 @@
 # Sistema de Agendamento de Clinica
 
-Aplicacao web em React, TypeScript, Vite e Supabase para gestao de uma clinica.
+Aplicacao web em React, TypeScript e Vite para gestao de uma clinica, rodando apenas no frontend.
 
 ## Funcionalidades
 
-- Login com Supabase Auth
+- Login local com contas de demonstracao
 - Perfis de recepcao e medico
 - Rotas protegidas
-- Dashboard com dados do Supabase
+- Dashboard com dados salvos no navegador
 - Pacientes, medicos, servicos e convenios
 - Agendamentos, consultas e prontuarios
 - Perfil do usuario com menu no header
 - Notificacoes no header
-- Chatbot IA integrado com Supabase Edge Functions e Groq
+- Assistente virtual local com respostas sobre o sistema
 
-## Variaveis de ambiente
+## Dados locais
 
-Crie `.env` localmente e configure as mesmas variaveis na Vercel:
+O sistema usa `localStorage`, entao nao precisa de backend, banco remoto ou variaveis de ambiente. Os dados ficam no navegador usado para acessar o app.
 
-```env
-VITE_SUPABASE_URL=https://seu-projeto.supabase.co
-VITE_SUPABASE_ANON_KEY=sua-chave-publica
-```
+Contas de teste:
+
+- `recepcao@clinica.com` / `Clinica@123456`
+- `teste@clinica.com` / `Clinica@123456`
+- `ana.ribeiro@clinica.com` / `Clinica@123456`
+- `bruno.matos@clinica.com` / `Clinica@123456`
 
 ## Scripts
 
@@ -32,10 +34,10 @@ npm run build
 npm run lint
 ```
 
-## Chatbot IA
+## Assistente virtual
 
-O assistente virtual fica integrado nas telas logadas e responde duvidas sobre o uso do sistema. Veja o guia completo em `CHATBOT_IA.md`.
+O assistente virtual fica integrado nas telas logadas e responde duvidas sobre o uso do sistema em modo local.
 
 ## Deploy
 
-Veja `VERCEL_DEPLOY.md`.
+Rode `npm run build` e hospede a pasta `dist` na Vercel, Netlify, GitHub Pages ou qualquer hospedagem estatica.

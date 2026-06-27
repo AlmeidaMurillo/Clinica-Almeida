@@ -15,6 +15,7 @@ export type Medico = {
   especialidade: string;
   telefone: string | null;
   email: string | null;
+  senha_login?: string | null;
   ativo: boolean;
 };
 

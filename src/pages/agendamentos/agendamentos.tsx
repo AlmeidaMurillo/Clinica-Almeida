@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import type { Agendamento, AgendamentoStatus, Medico, Paciente, Servico } from "../../lib/clinicTypes";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { paciente_id: "", medico_id: "", servico_id: "", data_hora: "", observacoes: "" };
@@ -41,12 +41,12 @@ export default function Agendamentos() {
   const [message, setMessage] = useState("");
 
   const loadData = async () => {
-    if (!supabase) return;
+    if (!localDb) return;
     const [agendamentosRes, pacientesRes, medicosRes, servicosRes] = await Promise.all([
-      supabase.from("agendamentos").select("id,paciente_id,medico_id,servico_id,data_hora,status,observacoes,pacientes(nome),medicos(nome,especialidade),servicos(nome)").order("data_hora", { ascending: true }).returns<Agendamento[]>(),
-      supabase.from("pacientes").select("id,nome,cpf,telefone,email,data_nascimento,ativo").eq("ativo", true).order("nome").returns<Paciente[]>(),
-      supabase.from("medicos").select("id,nome,crm,especialidade,telefone,email,ativo").eq("ativo", true).order("nome").returns<Medico[]>(),
-      supabase.from("servicos").select("id,nome,descricao,duracao_minutos,valor,ativo").eq("ativo", true).order("nome").returns<Servico[]>(),
+      localDb.from("agendamentos").select("id,paciente_id,medico_id,servico_id,data_hora,status,observacoes,pacientes(nome),medicos(nome,especialidade),servicos(nome)").order("data_hora", { ascending: true }).returns<Agendamento[]>(),
+      localDb.from("pacientes").select("id,nome,cpf,telefone,email,data_nascimento,ativo").eq("ativo", true).order("nome").returns<Paciente[]>(),
+      localDb.from("medicos").select("id,nome,crm,especialidade,telefone,email,ativo").eq("ativo", true).order("nome").returns<Medico[]>(),
+      localDb.from("servicos").select("id,nome,descricao,duracao_minutos,valor,ativo").eq("ativo", true).order("nome").returns<Servico[]>(),
     ]);
     setAgendamentos(agendamentosRes.data ?? []);
     setPacientes(pacientesRes.data ?? []);
@@ -63,7 +63,7 @@ export default function Agendamentos() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!localDb) return;
 
     const payload = {
       paciente_id: form.paciente_id,
@@ -74,8 +74,8 @@ export default function Agendamentos() {
     };
 
     const { error } = editingId
-      ? await supabase.from("agendamentos").update(payload).eq("id", editingId)
-      : await supabase.from("agendamentos").insert(payload);
+      ? await localDb.from("agendamentos").update(payload).eq("id", editingId)
+      : await localDb.from("agendamentos").insert(payload);
 
     setMessage(error ? "Nao foi possivel salvar o agendamento." : editingId ? "Agendamento atualizado com sucesso." : "Agendamento criado com sucesso.");
     if (!error) {
@@ -85,22 +85,22 @@ export default function Agendamentos() {
   };
 
   const updateStatus = async (agendamento: Agendamento, status: Agendamento["status"]) => {
-    if (!supabase) return;
+    if (!localDb) return;
 
     if (status === "confirmado") {
-      const { data: consultaExistente } = await supabase
+      const { data: consultaExistente } = await localDb
         .from("consultas")
         .select("id")
         .eq("agendamento_id", agendamento.id)
         .maybeSingle();
 
       if (consultaExistente) {
-        await supabase
+        await localDb
           .from("consultas")
           .update({ status: "aguardando", inicio: null, fim: null })
           .eq("agendamento_id", agendamento.id);
       } else {
-        const { error: consultaError } = await supabase.from("consultas").insert({
+        const { error: consultaError } = await localDb.from("consultas").insert({
           agendamento_id: agendamento.id,
           paciente_id: agendamento.paciente_id,
           medico_id: agendamento.medico_id,
@@ -114,12 +114,12 @@ export default function Agendamentos() {
       }
     }
 
-    await supabase.from("agendamentos").update({ status }).eq("id", agendamento.id);
+    await localDb.from("agendamentos").update({ status }).eq("id", agendamento.id);
     if (status === "pendente") {
-      await supabase.from("consultas").delete().eq("agendamento_id", agendamento.id);
+      await localDb.from("consultas").delete().eq("agendamento_id", agendamento.id);
     }
     if (status === "cancelado" || status === "nao_compareceu") {
-      await supabase
+      await localDb
         .from("consultas")
         .update({ status: status === "cancelado" ? "cancelada" : "nao_compareceu" })
         .eq("agendamento_id", agendamento.id);
@@ -141,9 +141,9 @@ export default function Agendamentos() {
   };
 
   const deleteAgendamento = async (agendamento: Agendamento) => {
-    if (!supabase || !window.confirm("Apagar este agendamento?")) return;
-    await supabase.from("consultas").delete().eq("agendamento_id", agendamento.id);
-    const { error } = await supabase.from("agendamentos").delete().eq("id", agendamento.id);
+    if (!localDb || !window.confirm("Apagar este agendamento?")) return;
+    await localDb.from("consultas").delete().eq("agendamento_id", agendamento.id);
+    const { error } = await localDb.from("agendamentos").delete().eq("id", agendamento.id);
     setMessage(error ? "Nao foi possivel apagar o agendamento." : "Agendamento apagado.");
     await loadData();
   };

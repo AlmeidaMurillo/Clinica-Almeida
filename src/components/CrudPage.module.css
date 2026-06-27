@@ -28,7 +28,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -96,6 +96,44 @@
   box-shadow: 0 0 0 3px rgba(0, 96, 100, 0.12);
 }
 
+.passwordWrap {
+  position: relative;
+}
+
+.passwordWrap input {
+  padding-right: 46px;
+}
+
+.eyeButton {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #20343b;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.eyeButton:hover {
+  background: rgba(0, 96, 100, 0.08);
+}
+
+.eyeButton svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -140,7 +178,12 @@
 .rowActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
+}
+
+.table .ghostButton {
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .split {
@@ -159,8 +202,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.toolbar h2 {
+  margin-bottom: 0;
 }
 
 .toolbar span {
@@ -171,11 +219,12 @@
 
 .tableWrap {
   overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .table {
   width: 100%;
-  min-width: 720px;
+  min-width: 820px;
   border-collapse: collapse;
 }
 
@@ -185,8 +234,10 @@
   padding: 12px 10px;
   color: #071319;
   font-size: 0.88rem;
+  line-height: 1.25;
   text-align: left;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .table th {
@@ -198,6 +249,11 @@
 
 .table td {
   font-weight: 680;
+}
+
+.table .rowActions {
+  flex-wrap: nowrap;
+  width: max-content;
 }
 
 .muted {
@@ -241,6 +297,11 @@
   font-weight: 760;
 }
 
+.searchField {
+  max-width: 430px;
+  margin-bottom: 14px;
+}
+
 .empty {
   padding: 24px;
   color: var(--text-muted);
@@ -249,7 +310,7 @@
   text-align: center;
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1280px) {
   .grid,
   .split {
     grid-template-columns: 1fr;
@@ -260,5 +321,18 @@
   .cabecalho {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .formCard,
+  .listCard {
+    padding: 14px;
+  }
+
+  .searchField {
+    max-width: none;
+  }
+
+  .table {
+    min-width: 700px;
   }
 }

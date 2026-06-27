@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
-import { AuthContext, type AuthContextValue, type Profile } from "./authStore";
+import { localDb } from "../lib/localDatabase";
+import { AuthContext, type AuthContextValue, type Profile, type Session } from "./authStore";
 
 type AuthProviderProps = {
   children: ReactNode;
 };
 
 async function getProfile(userId: string): Promise<Profile | null> {
-  if (!supabase) return null;
-
-  const { data, error } = await supabase
+  const { data, error } = await localDb
     .from("profiles")
     .select("id,nome,role,medico_id")
     .eq("id", userId)
@@ -27,7 +24,7 @@ async function getProfile(userId: string): Promise<Profile | null> {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(Boolean(supabase));
+  const [loading, setLoading] = useState(true);
 
   const user = session?.user ?? null;
 
@@ -41,13 +38,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [session]);
 
   useEffect(() => {
-    if (!supabase) {
-      return undefined;
-    }
-
     let active = true;
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    localDb.auth.getSession().then(async ({ data }) => {
       if (!active) return;
 
       setSession(data.session);
@@ -57,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = localDb.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       if (!nextSession?.user) {
         setProfile(null);
@@ -76,11 +69,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) {
-      throw new Error("Supabase nao configurado.");
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await localDb.auth.signInWithPassword({ email, password });
 
     if (error) {
       throw new Error("Email ou senha invalidos.");
@@ -93,11 +82,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const updatePassword = useCallback(async (password: string) => {
-    if (!supabase) {
-      throw new Error("Supabase nao configurado.");
-    }
-
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await localDb.auth.updateUser({ password });
 
     if (error) {
       throw new Error("Nao foi possivel alterar a senha.");
@@ -105,9 +90,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
-
-    await supabase.auth.signOut();
+    await localDb.auth.signOut();
     setSession(null);
     setProfile(null);
   }, []);

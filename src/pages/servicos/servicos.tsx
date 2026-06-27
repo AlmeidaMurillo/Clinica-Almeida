@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import type { Servico } from "../../lib/clinicTypes";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { nome: "", descricao: "", duracao_minutos: "30", valor: "0" };
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
 
 function toForm(servico: Servico) {
   return {
@@ -21,10 +29,33 @@ export default function Servicos() {
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+
+  const servicosFiltrados = useMemo(() => {
+    const term = normalizeSearch(search);
+    if (!term) return servicos;
+
+    return servicos.filter((servico) => {
+      const searchable = normalizeSearch([
+        servico.nome,
+        servico.descricao ?? "",
+        String(servico.duracao_minutos),
+        String(servico.valor),
+      ].join(" "));
+
+      return searchable.includes(term);
+    });
+  }, [servicos, search]);
 
   const loadServicos = async () => {
-    if (!supabase) return;
-    const { data } = await supabase.from("servicos").select("id,nome,descricao,duracao_minutos,valor,ativo").order("created_at", { ascending: false }).returns<Servico[]>();
+    if (!localDb) return;
+    const { data, error } = await localDb.from("servicos").select("id,nome,descricao,duracao_minutos,valor,ativo").order("created_at", { ascending: false }).returns<Servico[]>();
+    if (error) {
+      console.error("Erro ao carregar servicos", error);
+      setMessage(`Nao foi possivel carregar os servicos. ${error.message}`);
+      return;
+    }
+
     setServicos(data ?? []);
   };
 
@@ -37,7 +68,7 @@ export default function Servicos() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!localDb) return;
 
     const payload = {
       nome: form.nome,
@@ -48,20 +79,45 @@ export default function Servicos() {
     };
 
     const { error } = editingId
-      ? await supabase.from("servicos").update(payload).eq("id", editingId)
-      : await supabase.from("servicos").insert(payload);
+      ? await localDb.from("servicos").update(payload).eq("id", editingId)
+      : await localDb.from("servicos").insert(payload);
 
-    setMessage(error ? "Nao foi possivel salvar o servico." : editingId ? "Servico atualizado com sucesso." : "Servico cadastrado com sucesso.");
-    if (!error) {
-      resetForm();
-      await loadServicos();
+    if (error) {
+      console.error("Erro ao salvar servico", error);
+      setMessage(`Nao foi possivel salvar o servico. ${error.message}`);
+      return;
     }
+
+    setMessage(editingId ? "Servico atualizado com sucesso." : "Servico cadastrado com sucesso.");
+    resetForm();
+    await loadServicos();
+  };
+
+  const toggleServicoStatus = async (servico: Servico) => {
+    if (!localDb) return;
+
+    const { error } = await localDb.from("servicos").update({ ativo: !servico.ativo }).eq("id", servico.id);
+    if (error) {
+      console.error("Erro ao alterar status do servico", error);
+      setMessage(`Nao foi possivel ${servico.ativo ? "desativar" : "ativar"} o servico. ${error.message}`);
+      return;
+    }
+
+    setMessage(servico.ativo ? "Servico desativado." : "Servico ativado.");
+    await loadServicos();
   };
 
   const deleteServico = async (servico: Servico) => {
-    if (!supabase || !window.confirm(`Apagar ${servico.nome}?`)) return;
-    const { error } = await supabase.from("servicos").update({ ativo: false }).eq("id", servico.id);
-    setMessage(error ? "Nao foi possivel apagar o servico." : "Servico apagado da lista ativa.");
+    if (!localDb || !window.confirm(`Apagar definitivamente ${servico.nome}? Esta acao nao pode ser desfeita.`)) return;
+
+    const { error } = await localDb.from("servicos").delete().eq("id", servico.id);
+    if (error) {
+      console.error("Erro ao apagar servico", error);
+      setMessage(`Nao foi possivel apagar o servico. ${error.message}`);
+      return;
+    }
+
+    setMessage("Servico apagado definitivamente.");
     await loadServicos();
   };
 
@@ -85,11 +141,15 @@ export default function Servicos() {
             </form>
           </article>
           <article className={`${styles.card} ${styles.listCard}`}>
-            <div className={styles.toolbar}><h2>Servicos cadastrados</h2><span>{servicos.length} registros</span></div>
+            <div className={styles.toolbar}><h2>Servicos cadastrados</h2><span>{servicosFiltrados.length} de {servicos.length} registros</span></div>
+            <label className={`${styles.field} ${styles.searchField}`}>
+              <span>Pesquisar servico</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, descricao, duracao ou valor" />
+            </label>
             <div className={styles.tableWrap}>
               <table className={styles.table}><thead><tr><th>Nome</th><th>Duracao</th><th>Valor</th><th>Status</th><th>Acoes</th></tr></thead>
-                <tbody>{servicos.map((servico) => <tr key={servico.id}><td>{servico.nome}</td><td>{servico.duracao_minutos} min</td><td>R$ {Number(servico.valor).toFixed(2)}</td><td><span className={`${styles.badge} ${servico.ativo ? styles.success : styles.danger}`}>{servico.ativo ? "Ativo" : "Inativo"}</span></td><td><div className={styles.rowActions}><button className={styles.ghostButton} type="button" onClick={() => { setForm(toForm(servico)); setEditingId(servico.id); setMessage(""); }}>Editar</button><button className={`${styles.ghostButton} ${styles.dangerButton}`} type="button" onClick={() => void deleteServico(servico)}>Apagar</button></div></td></tr>)}</tbody></table>
-              {servicos.length === 0 && <div className={styles.empty}>Nenhum servico cadastrado.</div>}
+                <tbody>{servicosFiltrados.map((servico) => <tr key={servico.id}><td>{servico.nome}</td><td>{servico.duracao_minutos} min</td><td>R$ {Number(servico.valor).toFixed(2)}</td><td><span className={`${styles.badge} ${servico.ativo ? styles.success : styles.danger}`}>{servico.ativo ? "Ativo" : "Inativo"}</span></td><td><div className={styles.rowActions}><button className={styles.ghostButton} type="button" onClick={() => { setForm(toForm(servico)); setEditingId(servico.id); setMessage(""); }}>Editar</button><button className={styles.ghostButton} type="button" onClick={() => void toggleServicoStatus(servico)}>{servico.ativo ? "Desativar" : "Ativar"}</button><button className={`${styles.ghostButton} ${styles.dangerButton}`} type="button" onClick={() => void deleteServico(servico)}>Apagar</button></div></td></tr>)}</tbody></table>
+              {servicosFiltrados.length === 0 && <div className={styles.empty}>{search ? "Nenhum servico encontrado." : "Nenhum servico cadastrado."}</div>}
             </div>
           </article>
         </section>

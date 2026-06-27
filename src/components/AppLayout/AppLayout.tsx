@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/authStore";
 import type { UserRole } from "../../auth/authStore";
 import { resolveMedicoId } from "../../lib/medicoProfile";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import BrandLogo from "../BrandLogo/BrandLogo";
 import ChatBot from "../chatbot/ChatBot";
 import ShellScrollbar from "./ShellScrollbar";
@@ -20,7 +20,7 @@ import styles from "./AppLayout.module.css";
 */
 
 const MENU_ABERTO_KEY = "clinica-menu-aberto";
-const MOBILE_BREAKPOINT = 1200;
+const MOBILE_BREAKPOINT = 760;
 
 type IconeNome =
   | "bell"
@@ -155,9 +155,7 @@ const menuPrincipal: SecaoMenuItem[] = [
 ];
 
 const menuMobile: LinkMenuItem[] = [
-  { texto: "Dashboard", rota: "/dashboard", icone: "dashboard", end: true },
-  { texto: "Agenda", rota: "/agendamentos", icone: "calendar", destaque: true, roles: ["recepcao"] },
-  { texto: "Consultas", rota: "/consultas", icone: "stethoscope", destaque: true, roles: ["medico"] },
+  { texto: "Dashboard", rota: "/dashboard", icone: "dashboard", end: true, destaque: true },
   { texto: "Pacientes", rota: "/pacientes", icone: "patients", roles: ["recepcao"] },
   { texto: "Perfil", rota: "/usuarios", icone: "users", roles: ["medico"] },
 ];
@@ -600,10 +598,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     const carregarNotificacoes = async () => {
-      if (!supabase) {
+      if (!localDb) {
         setNotificationCount(0);
         setNotificationItems([]);
-        setNotificationText("Supabase nao configurado para carregar notificacoes.");
+        setNotificationText("Banco local indisponivel para carregar notificacoes.");
         return;
       }
 
@@ -616,7 +614,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       const medicoId = await resolveMedicoId(profile, user?.email);
 
-      const query = supabase
+      const query = localDb
         .from("agendamentos")
         .select("id,data_hora,status,pacientes(nome),medicos(nome)")
         .gte("data_hora", inicio.toISOString())
@@ -625,9 +623,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       const { data, error } = profile.role === "medico"
         ? medicoId
-          ? await query.eq("medico_id", medicoId).in("status", ["confirmado", "pendente"])
+          ? await query.eq("medico_id", medicoId).in("status", ["confirmado", "pendente"]).returns<NotificationRow[]>()
           : { data: null, error: null }
-        : await query.in("status", ["pendente", "confirmado"]);
+        : await query.in("status", ["pendente", "confirmado"]).returns<NotificationRow[]>();
 
       if (error) {
         console.error("Erro ao carregar notificacoes", error);
@@ -644,7 +642,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         return;
       }
 
-      const rows = (data ?? []) as NotificationRow[];
+      const rows = data ?? [];
       const unreadRows = rows.filter((item) => !readNotificationIds.includes(item.id));
       const items: NotificationItem[] = unreadRows.slice(0, 6).map((item) => {
         const dataHora = new Date(item.data_hora).toLocaleString("pt-BR", {

@@ -4,7 +4,7 @@ import AppLayout from "../../components/AppLayout/AppLayout";
 import { useAuth } from "../../auth/authStore";
 import type { Consulta, ConsultaStatus } from "../../lib/clinicTypes";
 import { resolveMedicoId } from "../../lib/medicoProfile";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 function statusClass(status: ConsultaStatus) {
@@ -32,8 +32,8 @@ export default function Consultas() {
   const isRecepcao = profile?.role === "recepcao";
 
   const loadConsultas = async () => {
-    if (!supabase) return;
-    let query = supabase.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").order("created_at", { ascending: false });
+    if (!localDb) return;
+    let query = localDb.from("consultas").select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)").order("created_at", { ascending: false });
     const medicoId = await resolveMedicoId(profile, user?.email);
     if (profile?.role === "medico") {
       if (!medicoId) {
@@ -58,7 +58,7 @@ export default function Consultas() {
   useEffect(() => { void loadConsultas(); }, [profile, user?.email]);
 
   const updateStatus = async (consulta: Consulta, status: Consulta["status"]) => {
-    if (!supabase) return;
+    if (!localDb) return;
 
     const podeIrParaAtendimento = ["aguardando", "finalizada", "cancelada", "nao_compareceu"].includes(consulta.status);
 
@@ -78,7 +78,7 @@ export default function Consultas() {
       fim: status === "finalizada" || status === "nao_compareceu" ? new Date().toISOString() : status === "em_atendimento" || status === "aguardando" ? null : consulta.fim,
     };
 
-    const { error } = await supabase.from("consultas").update(patch).eq("id", consulta.id);
+    const { error } = await localDb.from("consultas").update(patch).eq("id", consulta.id);
     if (!error && consulta.agendamento_id) {
       const agendamentoStatus =
         status === "cancelada"
@@ -93,7 +93,7 @@ export default function Consultas() {
                   ? "confirmado"
                   : null;
       if (agendamentoStatus) {
-        await supabase.from("agendamentos").update({ status: agendamentoStatus }).eq("id", consulta.agendamento_id);
+        await localDb.from("agendamentos").update({ status: agendamentoStatus }).eq("id", consulta.agendamento_id);
       }
     }
 
@@ -102,8 +102,8 @@ export default function Consultas() {
   };
 
   const deleteConsulta = async (consulta: Consulta) => {
-    if (!supabase || !isRecepcao || !window.confirm("Apagar esta consulta?")) return;
-    const { error } = await supabase.from("consultas").delete().eq("id", consulta.id);
+    if (!localDb || !isRecepcao || !window.confirm("Apagar esta consulta?")) return;
+    const { error } = await localDb.from("consultas").delete().eq("id", consulta.id);
     setMessage(error ? "Nao foi possivel apagar a consulta." : "Consulta apagada.");
     await loadConsultas();
   };

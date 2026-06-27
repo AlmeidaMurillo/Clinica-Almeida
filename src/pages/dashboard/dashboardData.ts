@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { isLocalDatabaseReady, localDb } from "../../lib/localDatabase";
 
 export type DashboardIconName = "calendar" | "patient" | "clock" | "check";
 export type MetricTone = "teal" | "mint" | "gold" | "blue";
@@ -178,7 +178,7 @@ function getWaitingTimeByDay(consultations: ConsultationRow[]) {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isLocalDatabaseReady || !localDb) {
     return dashboardFallbackData;
   }
 
@@ -191,20 +191,20 @@ export async function getDashboardData(): Promise<DashboardData> {
     totalConsultationsResponse,
     weekConsultationsResponse,
   ] = await Promise.all([
-    supabase
+    localDb
       .from("pacientes")
       .select("id", { count: "exact", head: true })
       .eq("ativo", true),
-    supabase
+    localDb
       .from("agendamentos")
       .select("id", { count: "exact", head: true })
       .eq("status", "pendente")
       .gte("data_hora", today.start)
       .lt("data_hora", today.end),
-    supabase
+    localDb
       .from("consultas")
       .select("id", { count: "exact", head: true }),
-    supabase
+    localDb
       .from("consultas")
       .select("created_at,inicio,fim")
       .gte("created_at", week.start)

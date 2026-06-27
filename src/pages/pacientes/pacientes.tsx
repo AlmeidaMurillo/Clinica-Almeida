@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import AppLayout from "../../components/AppLayout/AppLayout";
 import type { Paciente } from "../../lib/clinicTypes";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 type PacienteForm = {
@@ -14,6 +14,14 @@ type PacienteForm = {
 };
 
 const initialForm: PacienteForm = { nome: "", cpf: "", telefone: "", email: "", data_nascimento: "" };
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
 
 function toForm(paciente: Paciente): PacienteForm {
   return {
@@ -32,16 +40,41 @@ export default function Pacientes() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+
+  const pacientesFiltrados = useMemo(() => {
+    const term = normalizeSearch(search);
+    if (!term) return pacientes;
+
+    return pacientes.filter((paciente) => {
+      const searchable = normalizeSearch([
+        paciente.nome,
+        paciente.cpf ?? "",
+        paciente.telefone ?? "",
+        paciente.email ?? "",
+        paciente.data_nascimento ?? "",
+      ].join(" "));
+
+      return searchable.includes(term);
+    });
+  }, [pacientes, search]);
 
   const loadPacientes = async () => {
-    if (!supabase) return;
+    if (!localDb) return;
 
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await localDb
       .from("pacientes")
       .select("id,nome,cpf,telefone,email,data_nascimento,ativo")
       .order("created_at", { ascending: false })
       .returns<Paciente[]>();
+
+    if (error) {
+      console.error("Erro ao carregar pacientes", error);
+      setMessage(`Nao foi possivel carregar os pacientes. ${error.message}`);
+      setLoading(false);
+      return;
+    }
 
     setPacientes(data ?? []);
     setLoading(false);
@@ -58,7 +91,7 @@ export default function Pacientes() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
+    if (!localDb) return;
 
     setSaving(true);
     setMessage("");
@@ -73,13 +106,14 @@ export default function Pacientes() {
     };
 
     const { error } = editingId
-      ? await supabase.from("pacientes").update(payload).eq("id", editingId)
-      : await supabase.from("pacientes").insert(payload);
+      ? await localDb.from("pacientes").update(payload).eq("id", editingId)
+      : await localDb.from("pacientes").insert(payload);
 
     setSaving(false);
 
     if (error) {
-      setMessage(editingId ? "Nao foi possivel atualizar o paciente." : "Nao foi possivel cadastrar o paciente.");
+      console.error("Erro ao salvar paciente", error);
+      setMessage(`${editingId ? "Nao foi possivel atualizar o paciente." : "Nao foi possivel cadastrar o paciente."} ${error.message}`);
       return;
     }
 
@@ -94,11 +128,31 @@ export default function Pacientes() {
     setMessage("");
   };
 
-  const deletePaciente = async (paciente: Paciente) => {
-    if (!supabase || !window.confirm(`Apagar ${paciente.nome}?`)) return;
+  const togglePacienteStatus = async (paciente: Paciente) => {
+    if (!localDb) return;
 
-    const { error } = await supabase.from("pacientes").update({ ativo: false }).eq("id", paciente.id);
-    setMessage(error ? "Nao foi possivel apagar o paciente." : "Paciente apagado da lista ativa.");
+    const { error } = await localDb.from("pacientes").update({ ativo: !paciente.ativo }).eq("id", paciente.id);
+    if (error) {
+      console.error("Erro ao alterar status do paciente", error);
+      setMessage(`Nao foi possivel ${paciente.ativo ? "desativar" : "ativar"} o paciente. ${error.message}`);
+      return;
+    }
+
+    setMessage(paciente.ativo ? "Paciente desativado." : "Paciente ativado.");
+    await loadPacientes();
+  };
+
+  const deletePaciente = async (paciente: Paciente) => {
+    if (!localDb || !window.confirm(`Apagar definitivamente ${paciente.nome}? Esta acao nao pode ser desfeita.`)) return;
+
+    const { error } = await localDb.from("pacientes").delete().eq("id", paciente.id);
+    if (error) {
+      console.error("Erro ao apagar paciente", error);
+      setMessage(`Nao foi possivel apagar o paciente. ${error.message}`);
+      return;
+    }
+
+    setMessage("Paciente apagado definitivamente.");
     await loadPacientes();
   };
 
@@ -147,15 +201,19 @@ export default function Pacientes() {
           <article className={`${styles.card} ${styles.listCard}`}>
             <div className={styles.toolbar}>
               <h2>Pacientes cadastrados</h2>
-              <span>{pacientes.length} registros</span>
+              <span>{pacientesFiltrados.length} de {pacientes.length} registros</span>
             </div>
+            <label className={`${styles.field} ${styles.searchField}`}>
+              <span>Pesquisar paciente</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, CPF, telefone ou email" />
+            </label>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>Email</th><th>Status</th><th>Acoes</th></tr>
                 </thead>
                 <tbody>
-                  {pacientes.map((paciente) => (
+                  {pacientesFiltrados.map((paciente) => (
                     <tr key={paciente.id}>
                       <td>{paciente.nome}</td>
                       <td className={styles.muted}>{paciente.cpf ?? "-"}</td>
@@ -165,6 +223,7 @@ export default function Pacientes() {
                       <td>
                         <div className={styles.rowActions}>
                           <button className={styles.ghostButton} type="button" onClick={() => editPaciente(paciente)}>Editar</button>
+                          <button className={styles.ghostButton} type="button" onClick={() => void togglePacienteStatus(paciente)}>{paciente.ativo ? "Desativar" : "Ativar"}</button>
                           <button className={`${styles.ghostButton} ${styles.dangerButton}`} type="button" onClick={() => void deletePaciente(paciente)}>Apagar</button>
                         </div>
                       </td>
@@ -172,7 +231,7 @@ export default function Pacientes() {
                   ))}
                 </tbody>
               </table>
-              {!loading && pacientes.length === 0 && <div className={styles.empty}>Nenhum paciente cadastrado.</div>}
+              {!loading && pacientesFiltrados.length === 0 && <div className={styles.empty}>{search ? "Nenhum paciente encontrado." : "Nenhum paciente cadastrado."}</div>}
             </div>
           </article>
         </section>

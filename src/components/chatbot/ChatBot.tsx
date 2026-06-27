@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import BrandLogo from "../BrandLogo/BrandLogo";
 import styles from "./ChatBot.module.css";
 
@@ -67,7 +67,7 @@ function createMessage(role: ChatRole, content: string): ChatMessageData {
 }
 
 function getFallbackReply() {
-  return "Nao consegui acessar a IA agora. Confira se o Supabase esta configurado e se a Edge Function `chatbot` foi publicada com a variavel `GROQ_API_KEY`.";
+  return "Estou funcionando em modo local. Posso orientar sobre pacientes, medicos, agendamentos, consultas, prontuarios e hospedagem estatica.";
 }
 
 function useChatTheme() {
@@ -348,8 +348,8 @@ export default function ChatBot() {
     abortRef.current = new AbortController();
 
     try {
-      if (!supabase) {
-        throw new Error("Supabase nao configurado.");
+      if (!localDb) {
+        throw new Error("Banco local indisponivel.");
       }
 
       const history: ChatRequestMessage[] = messages.slice(-10).map((message) => ({
@@ -357,7 +357,7 @@ export default function ChatBot() {
         content: message.content,
       }));
 
-      const { data, error } = await supabase.functions.invoke<{ reply: string }>("chatbot", {
+      const { data, error } = await localDb.functions.invoke<{ reply: string }>("chatbot", {
         body: { message: text, history },
       });
 

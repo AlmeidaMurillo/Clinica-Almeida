@@ -5,7 +5,7 @@ import AppLayout from "../../components/AppLayout/AppLayout";
 import { useAuth } from "../../auth/authStore";
 import type { Consulta, Prontuario } from "../../lib/clinicTypes";
 import { resolveMedicoId } from "../../lib/medicoProfile";
-import { supabase } from "../../lib/supabase";
+import { localDb } from "../../lib/localDatabase";
 import styles from "../../components/CrudPage.module.css";
 
 const initialForm = { consulta_id: "", queixa: "", diagnostico: "", prescricao: "", observacoes: "" };
@@ -21,14 +21,14 @@ type ConsultaOption = {
   label: string;
 };
 
-type SupabaseErrorLike = {
+type LocalErrorLike = {
   message: string;
   code?: string;
   details?: string;
   hint?: string;
 };
 
-function formatSupabaseError(error: SupabaseErrorLike) {
+function formatLocalError(error: LocalErrorLike) {
   return [error.message, error.code && `codigo: ${error.code}`, error.details, error.hint]
     .filter(Boolean)
     .join(" | ");
@@ -58,18 +58,18 @@ export default function Prontuarios() {
   const consultaSelecionada = searchParams.get("consulta");
 
   const loadData = async () => {
-    if (!supabase) {
-      setMessage("Supabase nao configurado. Confira as variaveis de ambiente.");
+    if (!localDb) {
+      setMessage("Banco local indisponivel neste navegador.");
       return;
     }
 
     setLoading(true);
-    let consultasQuery = supabase
+    let consultasQuery = localDb
       .from("consultas")
       .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status,pacientes(nome),medicos(nome,especialidade)")
       .in("status", allowedConsultaStatuses)
       .order("created_at", { ascending: false });
-    let prontuariosQuery = supabase.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
+    let prontuariosQuery = localDb.from("prontuarios").select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at,pacientes(nome),medicos(nome)").order("created_at", { ascending: false });
     const medicoId = await resolveMedicoId(profile, user?.email);
     if (profile?.role === "medico") {
       if (!medicoId) {
@@ -93,7 +93,7 @@ export default function Prontuarios() {
 
     if (consultasRes.error) {
       console.error("Erro ao carregar consultas com relacionamentos", consultasRes.error);
-      let consultasFallbackQuery = supabase
+      let consultasFallbackQuery = localDb
         .from("consultas")
         .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
         .in("status", allowedConsultaStatuses)
@@ -107,7 +107,7 @@ export default function Prontuarios() {
       if (error) {
         setLoading(false);
         console.error("Erro ao carregar consultas simples", error);
-        setMessage(`Nao foi possivel carregar consultas: ${formatSupabaseError(error)}`);
+        setMessage(`Nao foi possivel carregar consultas: ${formatLocalError(error)}`);
         return;
       }
 
@@ -116,7 +116,7 @@ export default function Prontuarios() {
 
     if (prontuariosRes.error) {
       console.error("Erro ao carregar prontuarios com relacionamentos", prontuariosRes.error);
-      let prontuariosFallbackQuery = supabase
+      let prontuariosFallbackQuery = localDb
         .from("prontuarios")
         .select("id,consulta_id,paciente_id,medico_id,queixa,diagnostico,prescricao,observacoes,created_at")
         .order("created_at", { ascending: false });
@@ -129,7 +129,7 @@ export default function Prontuarios() {
       if (error) {
         setLoading(false);
         console.error("Erro ao carregar prontuarios simples", error);
-        setMessage(`Nao foi possivel carregar prontuarios: ${formatSupabaseError(error)}`);
+        setMessage(`Nao foi possivel carregar prontuarios: ${formatLocalError(error)}`);
         return;
       }
 
@@ -139,7 +139,7 @@ export default function Prontuarios() {
     setLoading(false);
 
     if (profile?.role === "medico" && medicoId && consultasData.length === 0) {
-      const { data, error } = await supabase
+      const { data, error } = await localDb
         .from("consultas")
         .select("id,agendamento_id,paciente_id,medico_id,inicio,fim,status")
         .eq("medico_id", medicoId)
@@ -189,8 +189,8 @@ export default function Prontuarios() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) {
-      setMessage("Supabase nao configurado. Confira as variaveis de ambiente.");
+    if (!localDb) {
+      setMessage("Banco local indisponivel neste navegador.");
       return;
     }
 
@@ -214,7 +214,7 @@ export default function Prontuarios() {
     setMessage("");
     const { data: prontuarioExistente, error: consultaProntuarioError } = editingId
       ? { data: null }
-      : await supabase
+      : await localDb
           .from("prontuarios")
           .select("id")
           .eq("consulta_id", consulta.id)
@@ -222,21 +222,21 @@ export default function Prontuarios() {
 
     if (consultaProntuarioError) {
       console.error("Erro ao verificar prontuario existente", consultaProntuarioError);
-      setMessage(`Nao foi possivel verificar se a consulta ja tem prontuario: ${formatSupabaseError(consultaProntuarioError)}`);
+      setMessage(`Nao foi possivel verificar se a consulta ja tem prontuario: ${formatLocalError(consultaProntuarioError)}`);
       return;
     }
 
     setSaving(true);
     const { error } = editingId
-      ? await supabase.from("prontuarios").update(payload).eq("id", editingId)
+      ? await localDb.from("prontuarios").update(payload).eq("id", editingId)
       : prontuarioExistente
-        ? await supabase.from("prontuarios").update(payload).eq("id", prontuarioExistente.id)
-        : await supabase.from("prontuarios").insert(payload);
+        ? await localDb.from("prontuarios").update(payload).eq("id", prontuarioExistente.id)
+        : await localDb.from("prontuarios").insert(payload);
     setSaving(false);
 
     if (error) {
       console.error("Erro ao salvar prontuario", error);
-      setMessage(`Nao foi possivel salvar o prontuario: ${formatSupabaseError(error)}`);
+      setMessage(`Nao foi possivel salvar o prontuario: ${formatLocalError(error)}`);
       return;
     }
 
@@ -246,8 +246,8 @@ export default function Prontuarios() {
   };
 
   const deleteProntuario = async (item: Prontuario) => {
-    if (!supabase || !isRecepcao || !window.confirm("Apagar este prontuario?")) return;
-    const { error } = await supabase.from("prontuarios").delete().eq("id", item.id);
+    if (!localDb || !isRecepcao || !window.confirm("Apagar este prontuario?")) return;
+    const { error } = await localDb.from("prontuarios").delete().eq("id", item.id);
     setMessage(error ? "Nao foi possivel apagar o prontuario." : "Prontuario apagado.");
     await loadData();
   };

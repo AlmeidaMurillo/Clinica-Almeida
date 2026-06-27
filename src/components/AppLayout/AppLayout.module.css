@@ -633,7 +633,7 @@
   display: none;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 760px) {
   .cabecalho {
     height: 3.625rem;
     padding: 0 12px;
@@ -744,18 +744,22 @@
 
   .conteudo {
     top: 3.625rem;
-    right: 9px;
-    bottom: 3.5rem;
+    right: 0;
+    bottom: 4.125rem;
+    left: 0;
+  }
+
+  .menuFechado .conteudo {
     left: 0;
   }
 
   .scrollbarConteudo {
     top: 3.625rem;
-    bottom: 3.5rem;
+    bottom: 4.125rem;
   }
 
   .caixaConteudo {
-    padding: 1.5rem 1.75rem 1.75rem;
+    padding: 1.5rem 1.5rem 2.25rem;
   }
 
   .menuInferior {
@@ -765,9 +769,9 @@
     left: 0;
     z-index: 80;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    min-height: 3.5rem;
-    padding: 0 8px env(safe-area-inset-bottom);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-height: 4.125rem;
+    padding: 0 10px env(safe-area-inset-bottom);
     border-top: 1px solid var(--line);
     background: var(--surface);
     box-shadow: 0 -12px 24px rgba(16, 32, 42, 0.1);
@@ -780,7 +784,7 @@
     align-content: center;
     gap: 2px;
     min-width: 0;
-    min-height: calc(3.5rem - env(safe-area-inset-bottom));
+    min-height: calc(4.125rem - env(safe-area-inset-bottom));
     padding: 4px 2px 5px;
     border: 0;
     background: transparent;
@@ -789,6 +793,14 @@
     font: inherit;
     text-align: center;
     text-decoration: none;
+  }
+
+  .menuInferior .itemMobile:first-child {
+    grid-column: 1;
+  }
+
+  .menuInferior .itemMobile:not(.itemMobileDestaque):last-child {
+    grid-column: 3;
   }
 
   .itemMobileAtivo {
@@ -816,12 +828,17 @@
   }
 
   .itemMobileDestaque {
-    transform: translateY(-12px);
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 76px;
+    min-height: 58px;
+    transform: translate(-50%, -10px);
   }
 
   .itemMobileDestaque .iconeMobile {
-    width: 48px;
-    height: 48px;
+    width: 54px;
+    height: 54px;
     border: 2px solid var(--accent);
     border-radius: 50%;
     background: var(--brand-forest);
@@ -829,13 +846,20 @@
     box-shadow: 0 0 0 5px var(--brand-forest), 0 0 24px var(--accent-glow);
   }
 
+  .itemMobileDestaque .iconeMobile .iconeSvg {
+    width: 17px;
+    height: 17px;
+    transform: translateY(-7px);
+  }
+
   .itemMobileDestaque .textoMobile {
     position: absolute;
-    top: 37px;
+    top: 34px;
     left: 50%;
-    width: 44px;
+    width: 64px;
     color: var(--accent-contrast);
-    font-size: 0.46rem;
+    font-size: 0.48rem;
+    line-height: 1;
     transform: translateX(-50%);
   }
 }
